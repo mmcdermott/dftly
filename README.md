@@ -207,7 +207,10 @@ algorithm: $ALGORITHM # the hash algorithm to use, e.g., "md5", "sha256", etc. D
 
 ### Simplified Form:
 The purpose of the simplified form is to take a concise, human-readable, unambiguous `YAML` file and return a
-mapping / structure of the associated referenced fully resolved form.
+mapping / structure of the associated referenced fully resolved form. Resolution from the simplified form to
+the fully-resolved form always happens in the context of a single table or table expression (which at this
+point is only a join of two or more tables) -- this means we always know the columns and input types available
+during resoltuion, and can use that information to more intelligently differentiate columns and literals.
 
 For example, the following YAML file:
 
@@ -224,12 +227,6 @@ code: {column: {name: foobar, type: null}}
 time: {literal: 221}
 
 ```
-
-Note that this example already reveals some implicit complexity -- an appropriate mapping from simplified form
-to fully resolved form may depend on the _context_ in which the simplified form is used -- in the above, for
-example, we've assigned two literal expressions to different types, one to a column and one to a literal --
-this may only be appropriate if the column "foobar" actually exists in the context being used, otherwise
-perhaps they should both be literal.
 
 It should always be the case that one can specify a fully resolved form in the simplified specification and it
 will be correctly interpreted as itself. This allows one to always provide an unambiguous input when desired.
