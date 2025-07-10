@@ -212,6 +212,11 @@ the fully-resolved form always happens in the context of a single table or table
 point is only a join of two or more tables) -- this means we always know the columns and input types available
 during resoltuion, and can use that information to more intelligently differentiate columns and literals.
 
+> [!NOTE]
+> This also implies that there must be some table resolution process for resolving a simplified form of a
+> table expression to a fully resolved table or join expression, but this should be much simpler given its
+> limited scope.
+
 For example, the following YAML file:
 
 ```yaml
