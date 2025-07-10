@@ -21,6 +21,14 @@ library is _not_ intended to be a SQL replacement, but rather give a simple, hum
 only the common operations you might need to express some simple operations you want to apply as a function of
 a single row of a dataframe or joined dataframe.
 
+The core library itself _does not_ provide any execution engine, but rather provides the DSL and a simplified
+human input form to express the operations. Then, extensions of this library in an engine-specific manner show
+how to realize those operations on the given engine. For example, the built-in `polars` extension (which you
+can enable simply by installing the `dfpm[polars]` extra argument, or installing polars separately) allows you
+to translate any fully resolved expression or input into a `polars` expression that can then be used to
+manipulate a `polars` dataframe. In this way, it is possible to extend this library for new dataframe engines
+easily without changing its human-readable input format and the DSL it supports.
+
 
 ## Design Concepts
 
@@ -28,8 +36,13 @@ a single row of a dataframe or joined dataframe.
    execute the operations on a dataframe through a variety of engines, and is non-ambiguous. The former is
    used for human readability, and is converted into the latter form before execution via a combination of
    lark parsing rules and a set of prescribed YAML structures.
-2. The core operations supported in this library are simple arithmetic and string operations, simple table
-   joins, simple matching / filtering, column re-mapping, and some basic type manipulation.
+2. The workflow used by users of this library (and their users) should be (1) express the human-readable
+   specification of the desired cell-level operations, (2) resolve those operations into the typed DSL of this
+   library, (3) use an execution engine to execute those operations on a dataframe, resulting in a new
+   dataframe, which will generally have the same number of rows but with transformed columns reflecting the
+   operations specified.
+3. The core operations supported in this library are simple arithmetic and string operations, simple table
+   joins, simple conditional expressions, column re-mapping, and some basic type manipulation.
 
 
 ### Fully resolved form
@@ -254,10 +267,3 @@ code:
 
 Much of this resolution process will happen leveraging specific lark grammars over string inputs, along with
 specialized processing of YAML structured inputs as well.
-
-
-## Desired Features
-
-### Additional Expressions
-  1. Unit conversion / parsing?
-  2. Grammar parsing?
