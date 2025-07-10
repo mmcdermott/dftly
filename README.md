@@ -252,6 +252,9 @@ code:
 
 ```
 
+Much of this resolution process will happen leveraging specific lark grammars over string inputs, along with
+specialized processing of YAML structured inputs as well.
+
 
 ## Desired Features
 
