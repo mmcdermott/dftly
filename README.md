@@ -175,6 +175,7 @@ Extracts the matches of a regex from a column or checks if a column matches or f
 regex: $REGEX # the regex to extract (must be a string and a valid regex)
 action: EXTRACT|MATCH|NOT_MATCH   # the action to perform
 input: $EXPR # the input expression to extract from
+group: NULL|$GROUP # the group to extract (if applicable, e.g., for `EXTRACT` action)
 ```
 
 ##### `COALESCE`
@@ -404,10 +405,12 @@ Expressions can be obtained from string, dictionary, or list inputs in a variety
 that any fully resolved input will be parsed as such, including expressions; we will omit those from this
 section for brevity.
 
+##### Shared dictionary short-form:
+
 In addition, all expressions can be expressed in a slightly shortened dictionary form by passing the
-`expression_type` as a key and the arguments to the expression as the value, though depending on the
-expression different context flags may be activated when parsing the arguments recursively. For example, this
-form allows for resolutions like:
+`expression_type` as a key (case insensitive) and the arguments to the expression as the value, though
+depending on the expression different context flags may be activated when parsing the arguments recursively.
+For example, this form allows for resolutions like:
 
 ```yaml
 a:
@@ -449,215 +452,156 @@ This dictionary short-form applies for all expression types; however, certain ex
 dictionary forms or string forms that can be used as well; these will be described below on a per-expression
 basis.
 
+##### Shared string form:
+
+All expressions can also be expressed in a string form via the python function calling signature, though this
+only supports inputs that can be suitably expressed in a minimal string form. This form allows for resolutions
+like:
+
+```yaml
+a: add(col1, col2)   # Add two columns together
+b: conditional(if=value_in_literal_set(col1, [1, 2, foo]), then=col2, else=43)   # Conditional expression
+```
+
+to be parsed into:
+
+```yaml
+a:
+  expression:
+    type: ADD
+    arguments:
+      - {column: {name: col1, type: null}}
+      - {column: {name: col2, type: null}}
+b:
+  expression:
+    type: CONDITIONAL
+    arguments:
+      if:
+        expression:
+          type: VALUE_IN_LITERAL_SET
+          arguments:
+            value: {column: {name: col1, type: null}}
+            set: [literal: 1, literal: 2, literal: foo]
+      then: {column: {name: col2, type: null}}
+      else: {literal: 43}
+```
+
+> [!WARNING]
+> Use of this form is generally frowned upon as it is much less human readable for those not
+> familiar with python syntax.
+
 ##### `ADD`
 
-Enables the context flag `recursive_list` on parsing the value.
-**TODO**
+- _Context flags_: `recursive_list`
+- _String form_: `col1 + col2 + ...` is mapped to `add: [col1, col2, ...]` and parsed accordingly. Spaces
+    are mandatory, to avoid ambiguity with literals or column names that may contain `+` characters.
 
 ##### `SUBTRACT`
 
-Enables the context flag `recursive_list` on parsing the value.
-**TODO**
+- _Context flags_: `recursive_list`
+- _String form_: `col1 - col2` is mapped to `subtract: [col1, col2]` and parsed accordingly. Spaces are
+    mandatory, to avoid ambiguity with literals or column names that may contain `-` characters.
 
 ##### `RESOLVE_TIMESTAMP`
 
-**TODO**
+_String form_: `date_col @ $TIME` or `year_col @ $CALENDAR_DATE`. In this format, the part before the `@` sign
+must be resolvable into a column of an appropriate type and the part after the `@` sign is resolved as a
+datetime part via the `PARSE_WITH_FORMAT_STRING` expression with the `AUTO` option for the format string and
+output type. The resolution of the columnar input and the time/date part must be mutually compatible (see the
+definition of this expression above).
+
+_Examples_:
+
+```yaml
+a: charttime @ 11:59:59 p.m.
+b: birth_year @ January 1, 12:00 a.m.
+```
+
+_Output_:
+
+```yaml
+a:
+  expression:
+    type: RESOLVE_TIMESTAMP
+    arguments:
+      date: {column: {name: charttime, type: null}}
+      time:
+        hour: {literal: 23}
+        minute: {literal: 59}
+        second: {literal: 59}
+b:
+  expression:
+    type: RESOLVE_TIMESTAMP
+    arguments:
+      date:
+        year: {column: {name: birth_year, type: null}}
+        month: {literal: 1}
+        day: {literal: 1}
+      time:
+        hour: {literal: 0}
+        minute: {literal: 0}
+        second: {literal: 0}
+```
 
 ##### `REGEX`
 
-**TODO**
+- _Aliases / dictionary short forms_: You can avoid specifying the regex action by using the `regex_$ACTION`
+    syntax, or by specifying the regex under an argument keyed with the action rather than the `regex` key.
+- _string form_: You can use the syntax `extract $REGEX from $INPUT` or `extract group 1 of $REGEX from $INPUT` to extract matches from an input, or `match $REGEX against $INPUT` to check if the input matches
+    the regex, or `not match $REGEX against $INPUT` to check if the input does not match the regex. The
+    `$REGEX` part must be a valid regex string, and the `$INPUT` part must be a valid column name or
+    expression.
 
 ##### `COALESCE`
 
-Enables the context flag `recursive_list` on parsing the value.
-**TODO**
+- _**List** form_: If the input is a list of expressions, it is parsed as a `COALESCE` operation,
+    which returns the first non-null value in the list. This is the most common case for lists in dftly. List
+    elements are parsed recursively.
 
 ##### `CONDITIONAL`
 
-**TODO**
+- _**List** form_: If the input is a list of expressions, such that each expression specifies an `if`/`then`
+    block, note that the coalesce operation will naturally yield a chained conditional expression capable of
+    multiple "else if" branches.
+- _String form_: You can use the python ternary if syntax, e.g., `col1 if col2 else col3`, which
+    is parsed as a `CONDITIONAL` expression with the `if` argument set to `col2`, the `then` argument set to
+    `col1`, and the `else` argument set to `col3`.
 
 ##### `STRING_INTERPOLATE`
 
-**TODO**
+_String form_: Uses python string interpolation syntax, interpreting the values as strings to be resolved.
 
 ##### `TYPE_CAST`
 
-**TODO**
-
-##### `VALUE_IN_LITERAL_SET`
-
-Enables the context flags `recursive_list` and `recurse_to_literal`.
-**TODO**
-
-##### `VALUE_IN_RANGE`
-
-**TODO**
-
-##### `NOT`/`AND`/`OR`
-
-**TODO**
-
-##### `PARSE_WITH_FORMAT_STRING`
-
-Here we support some alternative key-names for arguments to pre-specify the output type of the argument, and
-allow an expression alias and a shortned column-input form to be used as well. So, in particular, the
-following are all equivalent:
-
-```yaml
-time:
-  parse_with_format_string:
-    input: ${input_col}
-    output_type: datetime
-    format: '%Y-%m-%d %H:%M:%S'
-
-time:
-  parse_with_format_string:
-    input: ${input_col}
-    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the different key name for the format
-
-time:
-  parse:
-    input: ${input_col}
-    output_type: datetime
-    format: '%Y-%m-%d %H:%M:%S' # Note the long form for the input column
-
-time:
-  input_col:
-    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the short form for the input column
-```
-
-**TODO**
-
-##### `HASH_TO_INT`
-
-**TODO**
-
-### Parsing a simplified form by input type not otherwise specified / old:
-
-#### A list
-
-Lists are resolved (recursively) in one of three ways. First, if the context contains the key
-`recursive_list`, then the list will be resolved to a list of fully resolved expressions and returned
-as a list. This context is _only_ used for a subset of simplified expression input forms, where the expression
-input is expecting a list as one of the arguments.
-
-If that context variable is not enabled (the more common case), then the list is parsed into one of two
-expression inputs (though the two are actually mutually consistent, but warrant a separation for clarity):
-
-##### As coalesce operations:
-
-If the list (after recursive parsing) contains only elements that are either literals, columns, or
-expressions, then it is parsed as a `COALESCE` operation, which returns the first non-null value in the list.
-
-##### As a conditional expression:
-
-If each element but the last in the list is a map with two elements, one with key `if` -or- `when` and a value
-that evaluates to a scalar and one `then` with a value that evaluates to a scalar (the last element in the
-list may either be a scalar or another if/then block), then the list is parsed as a `CONDITIONAL` expression
-that follows the specified program flow.
+_String form_: Uses `as` keyword (case insensitive) to specify the type to cast to, e.g., `col1 AS int` or
+`col2 as float`.
 
 > [!NOTE]
-> This is actually consistent with the coalesce operation interpretation of this same list, as
-> conditional expressions without a `if_false` value yield `null` and thus would not trigger the coalesce.
-
-#### A map
-
-An associative array is parsed in one of two ways:
-First, if the map is a valid fully-resolved dftly specification, then it will be returned as is.
-
-Otherwise, it will be parsed into an `expression` input based on a collection of rules matching map structure
-(in terms of both number, type, and identity of keys and values) into different expression types and argument
-specifications. Typically, these inputs will be structured as a small number of key-value pairs (often only
-one) where the key is the type of the expression and the value is the arguments to that expression (though
-they will be parsed as well). Note that the context of the expression being parsed into will _change_ how
-downstream elements are parsed (e.g., a list of values may be parsed not as a coalesce operation but as a
-recursive list, and arguments may be mapped more directly to literals if the expression type mandates literal
-inputs). For example:
-
-```yaml
-foo:
-  value_in_literal_set:
-    value: ${bar}
-    set:
-      - 1
-      - foo
-      - ${baz}
-```
-
-goes to
-
-```yaml
-foo:
-  expression:
-    type: VALUE_IN_LITERAL_SET
-    arguments:
-      value: {column: {name: bar, type: null}}
-      set:
-        - {literal: 1}
-        - {literal: foo}
-        - {literal: '${baz}'} # Note that this is still resolved as a literal given the expr type constraints
-```
-
-Note that for expressions that take positional arguments, the value of the map can be a list:
-
-```yaml
-foo:
-  add:
-    - ${bar}
-    - 1
-    - 2.5
-```
-
-Beyond this syntax, which can be applied to all expression types, a subset of expressions have additional
-accepted input forms, and some have specific context flags that are triggered on their value parsing. We
-outline all expression types below:
-
-##### `ADD`
-
-Enables the context flag `recursive_list` on parsing the value.
-
-##### `SUBTRACT`
-
-Enables the context flag `recursive_list` on parsing the value.
-
-##### `RESOLVE_TIMESTAMP`
-
-**TODO**
-
-##### `REGEX`
-
-**TODO**
-
-##### `COALESCE`
-
-Enables the context flag `recursive_list` on parsing the value.
-
-##### `CONDITIONAL`
-
-**TODO**
-
-##### `STRING_INTERPOLATE`
-
-**TODO**
-
-##### `TYPE_CAST`
-
-**TODO**
+> Note this is shared with the `PARSE_WITH_FORMAT_STRING` expression, where a parse string can be used instead
+> of a type, e.g., `col1 as '%Y-%m-%d %H:%M:%S'` to parse a datetime from a string.
 
 ##### `VALUE_IN_LITERAL_SET`
 
-Enables the context flags `recursive_list` and `recurse_to_literal`.
+- _Context flags_: Enables the context flags `recursive_list` and `recurse_to_literal`.
+- _String form_: Uses the `in` keyword (case insensitive) to specify set to check against, e.g.,
+    `col2 in {1, 2, 3}`. The elements are parsed recursively from string form inputs.
+
+> [!NOTE]
+> Only the syntax for a set is permitted here to avoid ambiguity with the value in range expression type.
 
 ##### `VALUE_IN_RANGE`
 
-**TODO**
+_String form_: Uses the `in` keyword (case insensitive) to specify a range to check against, using the
+two-element, `[` or `(` and `]` or `)` syntax to specify the range, e.g., `col1 in [1, 10]` for an inclusive
+range between 1 and 10, or `col2 in (1, 10]` for an exclusive lower bound and inclusive upper bound.
 
 ##### `NOT`/`AND`/`OR`
 
-**TODO**
+_String from_: Uses `not`, `and`, and `or` keywords (case insensitive) or the `!`, `&&`, and `||` syntax.
 
 ##### `PARSE_WITH_FORMAT_STRING`
 
+_Dictionary shorter-form_:
 Here we support some alternative key-names for arguments to pre-specify the output type of the argument, and
 allow an expression alias and a shortned column-input form to be used as well. So, in particular, the
 following are all equivalent:
@@ -685,25 +629,9 @@ time:
     datetime_format: '%Y-%m-%d %H:%M:%S' # Note the short form for the input column
 ```
 
+_String form_: You can also use the `as` keyword (case insensitive) to specify the format string for parsing,
+with the structure of the format string dictating the output type.
+
 ##### `HASH_TO_INT`
 
-**TODO**
-
-#### A string
-
-In many ways, the string is the most fundamental part of the simplified form, as it is where expressions,
-operations, and other constructs will typically be specified. Strings are parsed according to a `lark`
-grammar, which enables a variety of ways string expressions can be resolved to different forms.
-
-Here are some specifications we want to support in the simplified form:
-
-```yaml
-code: "GENDER//${gender}" # String interpolate with a literal and a column
-time: date_col @ 11:59:59 p.m. # Resolve a date column to a datetime with a specific time
-time: ${date_col} @ 11:59:59 p.m. # Identical to above, but a more explicit column identifier?
-time: admission_date + offset_to_icu_start minutes + offset_from_icu_start # Complex arithmetic with units.
-text_value: "REGEX_EXTRACT(${code}, r'^[A-Z]{3}$')" # Extract a regex from a column
-
-```
-
-**TODO**
+- _Name Aliases_: You can use `hash` instead of `hash_to_int` in the typical string or dictionary form.
