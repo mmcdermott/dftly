@@ -21,9 +21,17 @@ data, deftly!
 
 Dftly is designed to enable users to easily express a (1) class of simple dataframe operations (2) in a
 human-readable way, that (3) can then be used across different execution engines through a middle-layer DSL
-that is fully resolved and unambiguous. Note that dftly will most often be used through downstream packages
-that make use of the common human-readable input format but may do intermediate processing of the YAML files
-their users specify before calling dftly's internal parsing and resolution functions.
+that is fully resolved and unambiguous.
+
+> [!NOTE]
+> that dftly will most often be used through downstream packages that make use of the common
+> human-readable input format but may do intermediate processing of the YAML files their users specify before
+> calling dftly's internal parsing and resolution functions.
+
+> [!WARNING]
+> dftly is _not_ designed to perform complex, interdependent operations across multiple dftly
+> blocks -- it will neither type check such operations nor provide a meaningful dependency graph for a parsed
+> dftly specification, and instead is designed to parse all specified blocks independently.
 
 #### (1) Class of Simple Dataframe Operations
 
@@ -163,7 +171,7 @@ Identify the first non-null value in a list of expressions.
 ##### `CONDITIONAL`
 
 A conditional expression that takes a boolean predicate, a true value, and a false value, and returns the
-appropriate value based on the predicate.
+appropriate value based on the predicate. **TODO**: Adjust syntax
 
 ```yaml
 predicate: $PREDICATE # the boolean predicate to evaluate
@@ -198,7 +206,7 @@ Checks if a value is in a set of values. Argument spec:
 
 ```yaml
 value: $VALUE_EXPR # the value to check
-set: # the set of values to check against (as a list)
+set: # the set of values to check against (as a list -of only literals-
   - $VALUE_1
   - $VALUE_2
   - '...'
@@ -245,16 +253,130 @@ algorithm: $ALGORITHM # the hash algorithm to use, e.g., "md5", "sha256", etc. D
 
 ### Simplified Form:
 
-The purpose of the simplified form is to take a concise, human-readable, unambiguous `YAML` file and return a
-mapping / structure of the associated referenced fully resolved form. Resolution from the simplified form to
-the fully-resolved form always happens in the context of a single table or table expression (which at this
-point is only a join of two or more tables) -- this means we always know the columns and input types available
-during resolution, and can use that information to more intelligently differentiate columns and literals.
+The purpose of the simplified form is to take a concise, human-readable representation (designed for use with
+`YAML` files, though it will ultimately be parsed from direct python structures) and return the fully resolved
+form.
+
+Given dftly's design flow, ultimately the process of parsing a full YAML file can be broken down into parsing
+the final blocks individually -- e.g., given a mapping from output column names to dftly specifications (in
+simplified form), we can parse each specification independently into a fully resolved form, then return them
+all as an output map. Therefore, this specification will focus on the parsing of a single simplified form
+expression at a time. In general, we will often parse specifications recursively, meaning that a list or
+dictionary passed as a value in the simplified form will have its elements likewise parsed in various ways.
+
+Note that a key constraint of the simplified form is that if a fully-resolved form is specified in the
+simplified form, it _must_ resolve to itself.
+
+Within a YAML file, a value for a YAML key can take on one of the following types:
+
+- a numeric literal (int, float, etc.)
+- a boolean literal (true, false)
+- a list
+- a map
+- a string
+
+As dftly is designed for use with YAML, the input (even in simplified form) for a dftly parsing operation will
+also be one of these types, and they are parsed as follows:
+
+#### A numeric or boolean literal
+
+These are parsed as typed literals in the fully resolved form, with the value being the literal specified:
+
+```yaml
+foo: 1234 # int literal
+bar: 12.34 # float literal
+baz: true # boolean literal
+```
+
+will go to
+
+```yaml
+foo: {literal: 1234}
+bar: {literal: 12.34}
+baz: {literal: true}
+```
+
+Note that this implies that if you wish to specify a literal that is a different type than numeric or boolean,
+you may need to use the fully-resolved form (especially for lists and maps, which are parsed differently).
+
+#### A list
+
+Lists are resolved (recursively) in one of three ways, depending on the contents and context of the list.
+First, in certain rare cases, the list will be resolved to a list of fully resolved expressions and returned
+as such. This is _only_ used in the context of simplified expression input forms, where the expression input
+is expecting a list as one of the arguments. In this case, the list is parsed recursively, and the output is
+the parsed list.
+
+The more common parsing is into one of two expression inputs (though the two are actually mutually
+consistent, but warrant a separation for clarity):
+
+##### As coalesce operations:
+
+If the list (after recursive parsing) contains only elements that are either literals, columns, or
+expressions, then it is parsed as a `COALESCE` operation, which returns the first non-null value in the list.
+
+##### As a conditional expression:
+
+If each element but the last in the list is a map with two elements, one with key `if` -or- `when` and a value
+that evaluates to a scalar and one `then` with a value that evaluates to a scalar (the last element in the
+list may either be a scalar or another if/then block), then the list is parsed as a `CONDITIONAL` expression
+that follows the specified program flow.
 
 > [!NOTE]
-> This also implies that there must be some table resolution process for resolving a simplified form of a
-> table expression to a fully resolved table or join expression, but this should be much simpler given its
-> limited scope.
+> This is actually consistent with the coalesce operation interpretation of this same list, as
+> conditional expressions without a `if_false` value yield `null` and thus would not trigger the coalesce.
+
+#### A map
+
+An associative array is parsed in one of two ways:
+First, if the map is a valid fully-resolved dftly specification, then it will be returned as is.
+
+Otherwise, it will be parsed into an `expression` input based on a collection of rules matching map structure
+(in terms of both number, type, and identity of keys and values) into different expression types and argument
+specifications. Typically, these inputs will be structured as a small number of key-value pairs (often only
+one) where the key is the type of the expression and the value is the arguments to that expression (though
+they will be parsed as well). Note that the context of the expression being parsed into will _change_ how
+downstream elements are parsed (e.g., a list of values may be parsed not as a coalesce operation but as a
+recursive list, and arguments may be mapped more directly to literals if the expression type mandates literal
+inputs). For example:
+
+```yaml
+foo:
+  value_in_set:
+    value: ${bar}
+    set:
+      - 1
+      - foo
+      - ${baz}
+```
+
+goes to
+
+```yaml
+foo:
+  expression:
+    type: VALUE_IN_SET
+    arguments:
+      value: {column: {name: bar, type: null}}
+      set:
+        - {literal: 1}
+        - {literal: foo}
+        - {literal: '${baz}'} # Note that this is still resolved as a literal given the expr type constraints
+```
+
+The exceptions to this rule are listed below:
+
+##### TODO
+
+#### A string
+
+In many ways, the string is the most fundamental part of the simplified form, as it is where expressions,
+operations, and other constructs will typically be specified. Strings are parsed according to a `lark`
+grammar, which enables a variety of ways string expressions can be resolved to different forms.
+
+**TODO**
+
+#### Old
 
 For example, the following YAML file:
 
