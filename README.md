@@ -447,7 +447,32 @@ Enables the context flags `recursive_list` and `recurse_to_literal`.
 
 ##### `PARSE_WITH_FORMAT_STRING`
 
-**TODO**
+Here we support some alternative key-names for arguments to pre-specify the output type of the argument, and
+allow an expression alias and a shortned column-input form to be used as well. So, in particular, the
+following are all equivalent:
+
+```yaml
+time:
+  parse_with_format_string:
+    input: ${input_col}
+    output_type: datetime
+    format: '%Y-%m-%d %H:%M:%S'
+
+time:
+  parse_with_format_string:
+    input: ${input_col}
+    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the different key name for the format
+
+time:
+  parse:
+    input: ${input_col}
+    output_type: datetime
+    format: '%Y-%m-%d %H:%M:%S' # Note the long form for the input column
+
+time:
+  input_col:
+    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the short form for the input column
+```
 
 ##### `HASH_TO_INT`
 
@@ -459,8 +484,6 @@ In many ways, the string is the most fundamental part of the simplified form, as
 operations, and other constructs will typically be specified. Strings are parsed according to a `lark`
 grammar, which enables a variety of ways string expressions can be resolved to different forms.
 
-**TODO**
-
 Here are some specifications we want to support in the simplified form:
 
 ```yaml
@@ -471,3 +494,5 @@ time: admission_date + offset_to_icu_start minutes + offset_from_icu_start # Com
 text_value: "REGEX_EXTRACT(${code}, r'^[A-Z]{3}$')" # Extract a regex from a column
 
 ```
+
+**TODO**
