@@ -1,6 +1,6 @@
-# DataFrame Transformation Language from YAML (DFTLY)
+# DataFrame Transformation Language from YAML (dftly)
 
-dftly (pronounced "deftly") is a simple, expressive, human-readable DSL for encoding simple tabular
+Dftly (pronounced "deftly") is a simple, expressive, human-readable DSL for encoding simple tabular
 transformations over dataframes, designed for expression in YAML files. With dftly, you can transform your
 data, deftly!
 
@@ -13,37 +13,67 @@ data, deftly!
 
 ## Usage
 
-Functionally, this library encodes a simple set of SQL-like operations that can be represented in a simple
-YAML file, to make it easier to communicate common data-pre-processing operations to users. These are largely
-_not_ designed to capture dataframe / table level operations -- but rather cell / observation level
-manipulations (even though those will then usually be executed over an entire table). This is because this
-library is _not_ intended to be a SQL replacement, but rather give a simple, human-readable way to express
-only the common operations you might need to express some simple operations you want to apply as a function of
-a single row of a dataframe or joined dataframe.
+**TODO**
 
-The core library itself _does not_ provide any execution engine, but rather provides the DSL and a simplified
-human input form to express the operations. Then, extensions of this library in an engine-specific manner show
-how to realize those operations on the given engine. For example, the built-in `polars` extension (which you
-can enable simply by installing the `dftly[polars]` extra argument, or installing polars separately) allows you
-to translate any fully resolved expression or input into a `polars` expression that can then be used to
-manipulate a `polars` dataframe. In this way, it is possible to extend this library for new dataframe engines
-easily without changing its human-readable input format and the DSL it supports.
+## Design Documentation
 
-## Design Concepts
+### Key Principles
 
-1. Operations can be expressed in a simplified form and a fully-resolved form. The latter is used to
-    execute the operations on a dataframe through a variety of engines, and is non-ambiguous. The former is
-    used for human readability, and is converted into the latter form before execution via a combination of
-    lark parsing rules and a set of prescribed YAML structures.
-2. The workflow used by users of this library (and their users) should be (1) express the human-readable
-    specification of the desired cell-level operations, (2) resolve those operations into the typed DSL of this
-    library, (3) use an execution engine to execute those operations on a dataframe, resulting in a new
-    dataframe, which will generally have the same number of rows but with transformed columns reflecting the
-    operations specified.
-3. The core operations supported in this library are simple arithmetic and string operations, simple table
-    joins, simple conditional expressions, column re-mapping, and some basic type manipulation.
+Dftly is designed to enable users to easily express a (1) class of simple dataframe operations (2) in a
+human-readable way, that (3) can then be used across different execution engines through a middle-layer DSL
+that is fully resolved and unambiguous. Note that dftly will most often be used through downstream packages
+that make use of the common human-readable input format but may do intermediate processing of the YAML files
+their users specify before calling dftly's internal parsing and resolution functions.
 
-### Fully resolved form
+#### (1) Class of Simple Dataframe Operations
+
+Dftly is _not_ designed to be a full SQL or dataframe manipulation DSL. Rather, it is only intended to capture
+operations that we call "tabular transformations", meaning those that can be expressed as a simple function of
+a (subset of) a single row of a dataframe, returning a single value (cell) in an output dataframe at an
+analogous row. This excludes operations that are at a table-level, such as pivoting or grouping, as well as
+operations that yield outputs over multiple rows, such as `explode` or `unpack` operations.
+
+It also includes some operations that are very common in data pre-processing workflows but are less common in
+typical SQL workflows, such as simple arithmetic operations, temporal resolution operations, and string
+manipulation.
+
+#### (2) Huamn-readable way
+
+The entire point of dftly is to make it easy to express data pre-processing operations in a communicable but
+unambiguous way. This is done by providing both a simplified language and a fully-resolved specification of
+dftly supported operations -- with the simplified language designed for use with YAML files. Internally, dftly
+will parse the simplified language into a fully-resolved form that can then be executed on a dataframe.
+
+#### (3) Middle-layer DSL and execution engines
+
+When the simplified form is parsed into a fully resolved form, the resulting structure is fully unambiguous
+and readily translatable to a dataframe execution context. Notably, the core library itself _does not_ provide
+any execution engine, but rather provides only the DSL for the fully resolved form, the parsing library for
+the simplified form. Then, extensions of this library in an engine-specific manner enable translation of the
+fully resolved form into operations on the given engine. For example, the built-in `polars` extension (which
+you can enable simply by installing the `dftly[polars]` extra argument, or installing polars separately)
+allows you to translate any fully resolved expression or input into a `polars` expression that can then be
+used to manipulate a `polars` dataframe. In this way, it is possible to extend this library for new dataframe
+engines easily without changing its human-readable input format and the DSL it supports.
+
+### Typical Workflow
+
+A typical workflow for using dftly (including both internal and external steps) would look like this:
+
+1. A user specifies a YAML file which contains a map (or collection of maps) from output column names to
+    dftly specifications for transformations to realize that output column.
+2. The library in use (not dftly itself, but the library the user is using that depends on dftly) reads
+    the YAML file and may perform some pre-processing (e.g., to extract sections for parsing with dftly from
+    those used for other purposes).
+3. As needed, the library calls `dftly.parse` on the (loaded) YAML file contents (in python data form --
+    e.g., not as strings, but dictionaries, lists, etc.). This will return a map of output column names to
+    fully resolved operations. If an extension is enabled, those resolved operations can be naively converted
+    to source execution code.
+4. The library then uses this output to execute those transformations (either in bulk across all columns or
+    on a per-column basis in the output map from dftly) on the input dataframes in use and uses the outputs
+    as needed.
+
+### Fully resolved dftly DSL:
 
 The purpose of the fully resolved form is to enable easy mapping of specified operations to dataframe engines
 / operations (e.g., `polars` expressions, SQL queries, etc.), in a manner that is technically unambiguous and
@@ -67,20 +97,8 @@ key `column` and the value being the column name. For example:
 ```yaml
 column:
   name: $COLUMN_NAME
-  type: $COLUMN_TYPE # optional, if not provided, type is inferred from the dataframe
+  type: $COLUMN_TYPE # optional, if missing, type is assumed to be unknown & valid for subsequent operations.
 
-```
-
-#### Tables
-
-Tables are simple references to a table among a collection of dataframes. They are expressed via a one-element
-map with the key `table` and the value being a table expression map:
-
-```yaml
-table:
-  name: $TABLE_NAME
-  path: $TABLE_PATH
-  columns: '...list of columns to include' # optional, if not provided, all columns are included
 ```
 
 #### Expressions
@@ -88,7 +106,7 @@ table:
 ```yaml
 expression:
   type: $EXPR_NAME
-  arguments: '...list or map of literals, columns, tables, or expressions'
+  arguments: '...list or map of literals, columns, or expressions'
 
 ```
 
@@ -141,20 +159,6 @@ input: $EXPR # the input expression to extract from
 ##### `COALESCE`
 
 Identify the first non-null value in a list of expressions.
-
-##### `JOIN`
-
-Joins two or more tables together on one or more keys. Argument spec:
-
-```yaml
-tables: # list of tables (as resolved tables)
-  - $TABLE_1
-  - $TABLE_2
-on: # list of join keys
-  - $KEY_1
-  - $KEY_2
-type: INNER|LEFT|RIGHT|FULL   # the type of join to perform
-```
 
 ##### `CONDITIONAL`
 
