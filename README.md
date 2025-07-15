@@ -400,6 +400,55 @@ e: {literal: qux} # Not a valid column name, so not parsed as a column
 
 #### Obtaining an `expression`
 
+Expressions can be obtained from string, dictionary, or list inputs in a variety of ways. Firstly, we note
+that any fully resolved input will be parsed as such, including expressions; we will omit those from this
+section for brevity.
+
+In addition, all expressions can be expressed in a slightly shortened dictionary form by passing the
+`expression_type` as a key and the arguments to the expression as the value, though depending on the
+expression different context flags may be activated when parsing the arguments recursively. For example, this
+form allows for resolutions like:
+
+```yaml
+a:
+  add: [col1, col2]
+b:
+  conditional:
+    if:
+      value_in_literal_set:
+        value: col1
+        set: [1, 2, foo]
+    then: col2
+    else: 43
+```
+
+to be parsed into:
+
+```yaml
+a:
+  expression:
+    type: ADD
+    arguments:
+      - {column: {name: col1, type: null}}
+      - {column: {name: col2, type: null}}
+b:
+  expression:
+    type: CONDITIONAL
+    arguments:
+      if:
+        expression:
+          type: VALUE_IN_LITERAL_SET
+          arguments:
+            value: {column: {name: col1, type: null}}
+            set: [literal: 1, literal: 2, literal: foo]
+      then: {column: {name: col2, type: null}}
+      else: {literal: 43}
+```
+
+This dictionary short-form applies for all expression types; however, certain expressions have even shorter
+dictionary forms or string forms that can be used as well; these will be described below on a per-expression
+basis.
+
 ##### `ADD`
 
 Enables the context flag `recursive_list` on parsing the value.
