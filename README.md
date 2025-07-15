@@ -122,11 +122,24 @@ Supported expressions include:
 
 ##### `ADD`
 
-Adds two or more inputs together. Only supports a list of positional arguments.
+Adds two or more inputs together. Only supports a list of positional arguments, which must obey the following
+type restrictions:
+
+1. All inputs are numeric or duration types (in which case the output will be the same type as the inputs).
+2. One input is a datetime and the rest are duration values (in which case the output will be a
+    datetime type).
+
+> [!NOTE]
+> For strings, use the `STRING_INTERPOLATE` expression instead; addition of strings is not supported.
 
 ##### `SUBTRACT`
 
-Subtracts the second input from the first. Only supports a list of positional arguments.
+Subtracts the second input from the first. Only supports a list of two positional arguments, which must obey
+the following type restrictions:
+
+1. Both inputs are numeric or duration types (in which case the output will be the same type as the inputs).
+2. The first input is a datetime and the second is a duration value (in which case the output will be a
+    datetime type).
 
 ##### `RESOLVE_TIMESTAMP`
 
@@ -171,12 +184,12 @@ Identify the first non-null value in a list of expressions.
 ##### `CONDITIONAL`
 
 A conditional expression that takes a boolean predicate, a true value, and a false value, and returns the
-appropriate value based on the predicate. **TODO**: Adjust syntax
+appropriate value based on the predicate.
 
 ```yaml
-predicate: $PREDICATE # the boolean predicate to evaluate
-if_true: $TRUE_VALUE # the value to return if the predicate is true
-if_false: $FALSE_VALUE # the value to return if the predicate is false
+if: $PREDICATE # the boolean predicate to evaluate
+then: $TRUE_VALUE # the value to return if the predicate is true
+else: $FALSE_VALUE # the value to return if the predicate is false. If omitted, `null` is returned when false.
 ```
 
 ##### `STRING_INTERPOLATE`
@@ -200,7 +213,7 @@ input: $INPUT_EXPR # the input expression to cast
 output_type: $OUTPUT_TYPE # the type to cast to, e.g., "int", "float", "str", "bool", etc.
 ```
 
-##### `VALUE_IN_SET`
+##### `VALUE_IN_LITERAL_SET`
 
 Checks if a value is in a set of values. Argument spec:
 
@@ -257,26 +270,37 @@ The purpose of the simplified form is to take a concise, human-readable represen
 `YAML` files, though it will ultimately be parsed from direct python structures) and return the fully resolved
 form.
 
-Given dftly's design flow, ultimately the process of parsing a full YAML file can be broken down into parsing
-the final blocks individually -- e.g., given a mapping from output column names to dftly specifications (in
-simplified form), we can parse each specification independently into a fully resolved form, then return them
-all as an output map. Therefore, this specification will focus on the parsing of a single simplified form
-expression at a time. In general, we will often parse specifications recursively, meaning that a list or
-dictionary passed as a value in the simplified form will have its elements likewise parsed in various ways.
+#### Parsing Design Principles
 
-Note that a key constraint of the simplified form is that if a fully-resolved form is specified in the
-simplified form, it _must_ resolve to itself.
+1. All parsing happens in a specific "context", which is simply a map of options that change certain aspects
+    of parsing behavior. Typically, parsing is in a `null` context, which means that default behavior is
+    used.
+2. Parsing a YAML map (or a python dictionary parsed from a YAML file) is done independently for each
+    key-value pair in the dictionary, with the key being the output column name and the value being the
+    expression to be parsed. If a top-level parse operation is attempted on a non-map value (e.g., a list),
+    it will fail.
+3. A key constraint of the simplified form is that if a fully-resolved form is specified in the simplified
+    form, it _must_ resolve to itself.
+4. Value-parsing (meaning not the top-level `parse` call but the internal call used on each of the values in
+    the input map) will go through different program flows depending on the type of the value passed. In
+    particular, value-parsing (hereafter just referred to as "parsing" despite the ambiguity with the
+    top-level operation) will go through a different flow depending on whether the input value is: (a) a
+    boolean or numeric literal, (b) a list, (c) a map, or (d) a string. The parsing rules for each of these
+    will be described below.
 
-Within a YAML file, a value for a YAML key can take on one of the following types:
+#### Context flags
 
-- a numeric literal (int, float, etc.)
-- a boolean literal (true, false)
-- a list
-- a map
-- a string
+##### `recursive_list`
 
-As dftly is designed for use with YAML, the input (even in simplified form) for a dftly parsing operation will
-also be one of these types, and they are parsed as follows:
+Lists are parsed recursively and returned as lists, rather than being parsed into expression form (see below).
+
+##### `literal`
+
+All inputs are parsed as literals, and no further resolution happens.
+
+##### `recurse_to_literal`
+
+Subsequent recursive resolution calls will enable the `literal` context flag.
 
 #### A numeric or boolean literal
 
@@ -301,14 +325,13 @@ you may need to use the fully-resolved form (especially for lists and maps, whic
 
 #### A list
 
-Lists are resolved (recursively) in one of three ways, depending on the contents and context of the list.
-First, in certain rare cases, the list will be resolved to a list of fully resolved expressions and returned
-as such. This is _only_ used in the context of simplified expression input forms, where the expression input
-is expecting a list as one of the arguments. In this case, the list is parsed recursively, and the output is
-the parsed list.
+Lists are resolved (recursively) in one of three ways. First, if the context contains the key
+`recursive_list`, then the list will be resolved to a list of fully resolved expressions and returned
+as a list. This context is _only_ used for a subset of simplified expression input forms, where the expression
+input is expecting a list as one of the arguments.
 
-The more common parsing is into one of two expression inputs (though the two are actually mutually
-consistent, but warrant a separation for clarity):
+If that context variable is not enabled (the more common case), then the list is parsed into one of two
+expression inputs (though the two are actually mutually consistent, but warrant a separation for clarity):
 
 ##### As coalesce operations:
 
@@ -342,7 +365,7 @@ inputs). For example:
 
 ```yaml
 foo:
-  value_in_set:
+  value_in_literal_set:
     value: ${bar}
     set:
       - 1
@@ -355,7 +378,7 @@ goes to
 ```yaml
 foo:
   expression:
-    type: VALUE_IN_SET
+    type: VALUE_IN_LITERAL_SET
     arguments:
       value: {column: {name: bar, type: null}}
       set:
@@ -364,9 +387,71 @@ foo:
         - {literal: '${baz}'} # Note that this is still resolved as a literal given the expr type constraints
 ```
 
-The exceptions to this rule are listed below:
+Note that for expressions that take positional arguments, the value of the map can be a list:
 
-##### TODO
+```yaml
+foo:
+  add:
+    - ${bar}
+    - 1
+    - 2.5
+```
+
+Beyond this syntax, which can be applied to all expression types, a subset of expressions have additional
+accepted input forms, and some have specific context flags that are triggered on their value parsing. We
+outline all expression types below:
+
+##### `ADD`
+
+Enables the context flag `recursive_list` on parsing the value.
+
+##### `SUBTRACT`
+
+Enables the context flag `recursive_list` on parsing the value.
+
+##### `RESOLVE_TIMESTAMP`
+
+**TODO**
+
+##### `REGEX`
+
+**TODO**
+
+##### `COALESCE`
+
+Enables the context flag `recursive_list` on parsing the value.
+
+##### `CONDITIONAL`
+
+**TODO**
+
+##### `STRING_INTERPOLATE`
+
+**TODO**
+
+##### `TYPE_CAST`
+
+**TODO**
+
+##### `VALUE_IN_LITERAL_SET`
+
+Enables the context flags `recursive_list` and `recurse_to_literal`.
+
+##### `VALUE_IN_RANGE`
+
+**TODO**
+
+##### `NOT`/`AND`/`OR`
+
+**TODO**
+
+##### `PARSE_WITH_FORMAT_STRING`
+
+**TODO**
+
+##### `HASH_TO_INT`
+
+**TODO**
 
 #### A string
 
@@ -376,27 +461,6 @@ grammar, which enables a variety of ways string expressions can be resolved to d
 
 **TODO**
 
-#### Old
-
-For example, the following YAML file:
-
-```yaml
-code: foobar
-value: 221
-
-```
-
-might map to the following fully resolved form:
-
-```yaml
-code: {column: {name: foobar, type: null}}
-time: {literal: 221}
-
-```
-
-It should always be the case that one can specify a fully resolved form in the simplified specification and it
-will be correctly interpreted as itself. This allows one to always provide an unambiguous input when desired.
-
 Here are some specifications we want to support in the simplified form:
 
 ```yaml
@@ -405,13 +469,5 @@ time: date_col @ 11:59:59 p.m. # Resolve a date column to a datetime with a spec
 time: ${date_col} @ 11:59:59 p.m. # Identical to above, but a more explicit column identifier?
 time: admission_date + offset_to_icu_start minutes + offset_from_icu_start # Complex arithmetic with units.
 text_value: "REGEX_EXTRACT(${code}, r'^[A-Z]{3}$')" # Extract a regex from a column
-code: [option_1, option_2] # coalesce a list of options
-code:
-  when: condition # Conditional expression with a predicate
-  then: true_value
-  else: false_value
 
 ```
-
-Much of this resolution process will happen leveraging specific lark grammars over string inputs, along with
-specialized processing of YAML structured inputs as well.
