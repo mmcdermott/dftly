@@ -3,12 +3,12 @@ requires = ["setuptools>=64", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dfpm"
+name = "dftly"
 dynamic = ["version"]
 authors = [
   { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
 ]
-description = "A simple library for a safe, expressive, config-file friendly, and readable DSL for encoding simple dataframe operations."
+description = "dftly (pronounced deftly) is a simple library for a safe, expressive, config-file friendly, and readable DSL for encoding simple dataframe operations."
 readme = "README.md"
 requires-python = ">=3.12"
 classifiers = [
@@ -26,5 +26,5 @@ dev = ["pre-commit<4", "ruff"]
 tests = ["pytest", "pytest-cov"]
 
 [project.urls]
-Homepage = "https://github.com/mmcdermott/df_parser_matcher"
-Issues = "https://github.com/mmcdermott/df_parser_matcher/issues"
+Homepage = "https://github.com/mmcdermott/dftly"
+Issues = "https://github.com/mmcdermott/dftly/issues"

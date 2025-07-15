@@ -1,16 +1,15 @@
-# DataFrame Parser-Matcher (DFPM)
+# DataFrame Transformation Language from YAML (DFTLY)
+
+dftly (pronounced "deftly") is a simple, expressive, human-readable DSL for encoding simple tabular
+transformations over dataframes, designed for expression in YAML files. With dftly, you can transform your
+data, deftly!
 
 > [!WARNING]
 > This does not work at all yet. This is just mostly speculative.
 
-A simple library for a safe, expressive, config-file friendly, and readable DSL for encoding simple dataframe
-operations. With this library, you can allow your users to write simple, expressive, and safe dataframe
-operations in configuration files without needing to write any code and have those operations be executable on
-any supported dataframe format.
-
 ## Installation
 
-`pip install dfpm`
+`pip install dftly`
 
 ## Usage
 
@@ -25,7 +24,7 @@ a single row of a dataframe or joined dataframe.
 The core library itself _does not_ provide any execution engine, but rather provides the DSL and a simplified
 human input form to express the operations. Then, extensions of this library in an engine-specific manner show
 how to realize those operations on the given engine. For example, the built-in `polars` extension (which you
-can enable simply by installing the `dfpm[polars]` extra argument, or installing polars separately) allows you
+can enable simply by installing the `dftly[polars]` extra argument, or installing polars separately) allows you
 to translate any fully resolved expression or input into a `polars` expression that can then be used to
 manipulate a `polars` dataframe. In this way, it is possible to extend this library for new dataframe engines
 easily without changing its human-readable input format and the DSL it supports.
