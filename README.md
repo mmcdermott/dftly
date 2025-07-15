@@ -268,9 +268,7 @@ algorithm: $ALGORITHM # the hash algorithm to use, e.g., "md5", "sha256", etc. D
 
 The purpose of the simplified form is to take a concise, human-readable representation (designed for use with
 `YAML` files, though it will ultimately be parsed from direct python structures) and return the fully resolved
-form.
-
-#### Parsing Design Principles
+form. The simplified form obeys the following design principles:
 
 1. All parsing happens in a specific "context", which is simply a map of options that change certain aspects
     of parsing behavior. Typically, parsing is in a `null` context, which means that default behavior is
@@ -281,12 +279,25 @@ form.
     it will fail.
 3. A key constraint of the simplified form is that if a fully-resolved form is specified in the simplified
     form, it _must_ resolve to itself.
-4. Value-parsing (meaning not the top-level `parse` call but the internal call used on each of the values in
-    the input map) will go through different program flows depending on the type of the value passed. In
-    particular, value-parsing (hereafter just referred to as "parsing" despite the ambiguity with the
-    top-level operation) will go through a different flow depending on whether the input value is: (a) a
-    boolean or numeric literal, (b) a list, (c) a map, or (d) a string. The parsing rules for each of these
-    will be described below.
+
+In addition to the above principles, value-parsing (meaning not the top-level `parse` call but the internal
+call used on each of the values in the input map) can be directly simplified based both on the (python) type
+of the input to be parsed (as YAML only supports a limited set of plain python types) as well as the possible
+output type you can obtain. The vast majority of the complexity in this language will be found when we are
+parsing strings into expression outputs, followed by parsing maps into expression outputs.
+
+In the below sections, we will describe the language in detail, over the following sections:
+
+1. We will describe the context flags that modify parsing behavior. Note that these cannot in general be set
+    manually by the user, but instead are controlled based on other aspects of the parse tree and parsing
+    always begins with a `null` context (aside from specifying available columns, if applicable).
+2. We will then describe how `literal` outputs can be obtained, across different YAML input types across
+    different context flags.
+3. Next, we will descriobe how `column` outputs can be obtained, which is only possible through map and
+    string inputs.
+4. We will finally describe how to obtain expression inputs, separated into both general principles and
+    mechanisms for different expression types, leveraging (where applicable) both string, map, and/or list
+    input types.
 
 #### Context flags
 
@@ -302,26 +313,177 @@ All inputs are parsed as literals, and no further resolution happens.
 
 Subsequent recursive resolution calls will enable the `literal` context flag.
 
-#### A numeric or boolean literal
+##### `input_schema`
 
-These are parsed as typed literals in the fully resolved form, with the value being the literal specified:
+This is a map of available input column names to their initial types, which can dictate some aspects of the
+parsing behavior. If set to `null`, it is assumed to be unknown/unspecified. A `null` type value indicates
+that the column exists but has an unknown/unspecified type.
+
+#### Obtaining a `literal`
+
+Literals can be obtained in one of several ways:
+
+1. If a fully-resolved literal is specified.
+2. If the `literal` context flag is set, then the input is parsed as a literal regardless of its type.
+3. If a numeric or boolean literal is passed as input, it is parsed as a literal.
+4. If a string is passed as an input that _is not_ a valid and simple input column name nor an example of a
+    parse option for another expression, then it is parsed as a literal. Note this is also a valid instance
+    of the string parsing as a string interpolation, simply without any interpolation keys or values.
+
+For example:
+
+_Input_ (`null` context):
 
 ```yaml
-foo: 1234 # int literal
-bar: 12.34 # float literal
-baz: true # boolean literal
+a: 1234 # int literal
+b: 12.34 # float literal
+c: true # boolean literal
+d: {literal: [1, 2, 3]} # list literal, fully resolved form
+e: foobar123   # string literal, provided it is not a valid column name or expression
 ```
 
-will go to
+_Output_:
 
 ```yaml
-foo: {literal: 1234}
-bar: {literal: 12.34}
-baz: {literal: true}
+a: {literal: 1234}
+b: {literal: 12.34}
+c: {literal: true}
+d: {literal: [1, 2, 3]}
+e: {literal: foobar123}
 ```
 
-Note that this implies that if you wish to specify a literal that is a different type than numeric or boolean,
-you may need to use the fully-resolved form (especially for lists and maps, which are parsed differently).
+> [!NOTE]
+> The last example works here as the input is a `null` context (so it has no columns specified), and
+> `foobar123` is not an expression parseable input. Were you to specify in the `input_schema` context variable
+> containing `foobar123`, then the input would be parsed as a column reference instead.
+
+> [!NOTE]
+> If the `literal` flag were true in context, then everything would just be parsed as a literal.
+
+#### Obtaining a `column`
+
+Columns can be obtained in one of two ways:
+
+1. (_Fully resolved_) If a fully-resolved column is specified.
+2. (_Dictionary short form)_ If the input is a dictionary with a single key `column` and a value that is a string, it is resolved into
+    a column form with the given `name` set and the `type` inferred from the `input_schema` if possible, or
+    left as `null` if not.
+3. (_String form_) If the input is a string that is a valid column name and not an expression input parse
+    target, then it is parsed as a column reference.
+
+> [!NOTE]
+> If a column is specified in string form, it must be present in the `input_schema` context --
+> therefore, in this setting, were you to specify its type, it would be included in the output. However, this
+> is not true for a column literal, which is assumed to be specified as intended (type included).
+
+For example:
+
+_Input_ (`input_schema: {'foobar123': null, 'bar': 'string'}` context):
+
+```yaml
+a: {column: {name: bar}} # fully resolved column
+b: foobar123   # string column reference, which is a valid column name
+c: {column: bar} # Dictionary short-form
+d: {column: qux} # Dictionary short-form
+e: qux # Not a valid column name, so not parsed as a column
+```
+
+_Output_:
+
+```yaml
+a: {column: {name: bar, type: null}} # fully resolved column
+b: {column: {name: foobar123, type: null}} # string column reference, which is a valid column name
+c: {column: {name: bar, type: string}} # Dictionary short-form infers type
+d: {column: {name: qux, type: null}} # Dictionary short-form does not error if column is not in input_schema
+e: {literal: qux} # Not a valid column name, so not parsed as a column
+```
+
+#### Obtaining an `expression`
+
+##### `ADD`
+
+Enables the context flag `recursive_list` on parsing the value.
+**TODO**
+
+##### `SUBTRACT`
+
+Enables the context flag `recursive_list` on parsing the value.
+**TODO**
+
+##### `RESOLVE_TIMESTAMP`
+
+**TODO**
+
+##### `REGEX`
+
+**TODO**
+
+##### `COALESCE`
+
+Enables the context flag `recursive_list` on parsing the value.
+**TODO**
+
+##### `CONDITIONAL`
+
+**TODO**
+
+##### `STRING_INTERPOLATE`
+
+**TODO**
+
+##### `TYPE_CAST`
+
+**TODO**
+
+##### `VALUE_IN_LITERAL_SET`
+
+Enables the context flags `recursive_list` and `recurse_to_literal`.
+**TODO**
+
+##### `VALUE_IN_RANGE`
+
+**TODO**
+
+##### `NOT`/`AND`/`OR`
+
+**TODO**
+
+##### `PARSE_WITH_FORMAT_STRING`
+
+Here we support some alternative key-names for arguments to pre-specify the output type of the argument, and
+allow an expression alias and a shortned column-input form to be used as well. So, in particular, the
+following are all equivalent:
+
+```yaml
+time:
+  parse_with_format_string:
+    input: ${input_col}
+    output_type: datetime
+    format: '%Y-%m-%d %H:%M:%S'
+
+time:
+  parse_with_format_string:
+    input: ${input_col}
+    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the different key name for the format
+
+time:
+  parse:
+    input: ${input_col}
+    output_type: datetime
+    format: '%Y-%m-%d %H:%M:%S' # Note the long form for the input column
+
+time:
+  input_col:
+    datetime_format: '%Y-%m-%d %H:%M:%S' # Note the short form for the input column
+```
+
+**TODO**
+
+##### `HASH_TO_INT`
+
+**TODO**
+
+### Parsing a simplified form by input type not otherwise specified / old:
 
 #### A list
 
