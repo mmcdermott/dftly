@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["omegaconf", "lark"]
+dependencies = ["PyYAML", "lark"]
 
 [tool.setuptools_scm]
 
