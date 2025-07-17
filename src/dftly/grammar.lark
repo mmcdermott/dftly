@@ -4,6 +4,7 @@
 
 PLUS: "+"
 MINUS: "-"
+AT: "@"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
@@ -12,8 +13,10 @@ start: expr
 expr: conditional
 conditional: additive IF additive ELSE conditional   -> ifexpr
           | additive
-additive: cast_expr op*
+additive: at_expr op*
 op: PLUS cast_expr     -> plus
   | MINUS cast_expr    -> minus
+?at_expr: cast_expr AT cast_expr   -> resolve_ts
+        | cast_expr
 cast_expr: NAME AS NAME   -> cast
          | NAME           -> name

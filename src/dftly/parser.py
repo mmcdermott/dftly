@@ -1,12 +1,36 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional, Tuple
+import re
+from datetime import datetime
+from dateutil import parser as dtparser
 
 from importlib.resources import files
-
 from lark import Lark, Transformer
-
 from .nodes import Column, Expression, Literal
+
+# ---------------------------------------------------------------------------
+# Constants and regex patterns for timestamp parsing
+
+MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+
+DATE_TIME_RE = re.compile(
+    r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2}),\s*(?P<time>.+)$",
+    re.IGNORECASE,
+)
 
 
 class Parser:
@@ -74,6 +98,12 @@ class Parser:
     # ------------------------------------------------------------------
 
     def _parse_string(self, value: str) -> Any:
+        # handle resolve timestamp syntax using '@'
+        if "@" in value and value.count("@") == 1:
+            resolved = self._parse_resolve_timestamp(value)
+            if resolved is not None:
+                return resolved
+
         try:
             tree = self._lark.parse(value)
             result = self._transformer.transform(tree)
@@ -90,6 +120,78 @@ class Parser:
                 return Column(value, self.input_schema.get(value))
             return Literal(value)
         raise TypeError(f"cannot convert {type(value).__name__} to node")
+
+    # ------------------------------------------------------------------
+    def _parse_time_string(self, text: str) -> Optional[Dict[str, Any]]:
+        text = text.strip()
+        if any(month in text.lower() for month in MONTHS):
+            return None
+        try:
+            dt = dtparser.parse(text, default=datetime(1900, 1, 1))
+        except (ValueError, OverflowError):
+            return None
+
+        return {
+            "time": {
+                "hour": Literal(dt.hour),
+                "minute": Literal(dt.minute),
+                "second": Literal(dt.second),
+            }
+        }
+
+    def _parse_datetime_string(self, text: str) -> Optional[Dict[str, Any]]:
+        match = DATE_TIME_RE.match(text.strip())
+        if not match:
+            return None
+        month_name = match.group("month").lower()
+        month = MONTHS.get(month_name)
+        if month is None:
+            return None
+        day = int(match.group("day"))
+        time_part = match.group("time")
+        try:
+            dt = dtparser.parse(time_part, default=datetime(1900, 1, 1))
+        except (ValueError, OverflowError):
+            return None
+        return {
+            "date": {
+                "month": Literal(month),
+                "day": Literal(day),
+            },
+            "time": {
+                "hour": Literal(dt.hour),
+                "minute": Literal(dt.minute),
+                "second": Literal(dt.second),
+            },
+        }
+
+    def _parse_resolve_timestamp(self, value: str) -> Optional[Expression]:
+        try:
+            left_text, right_text = [part.strip() for part in value.split("@", 1)]
+        except ValueError:
+            return None
+
+        # parse right side first to determine missing pieces
+        right_parsed = self._parse_datetime_string(
+            right_text
+        ) or self._parse_time_string(right_text)
+        if right_parsed is None:
+            return None
+
+        left_node = self._parse_string(left_text)
+
+        args: Dict[str, Any] = {}
+        if "date" in right_parsed and "year" not in right_parsed["date"]:
+            right_parsed["date"]["year"] = self._as_node(left_node)
+            args.update(right_parsed)
+        elif "time" in right_parsed and "date" not in right_parsed:
+            args["date"] = self._as_node(left_node)
+            args["time"] = right_parsed["time"]
+        else:
+            args.update(right_parsed)
+            args["date"] = self._as_node(left_node)
+
+        return Expression("RESOLVE_TIMESTAMP", args)
 
 
 class DftlyTransformer(Transformer):
@@ -156,6 +258,16 @@ class DftlyTransformer(Transformer):
                 "if": self.parser._as_node(pred),
                 "then": self.parser._as_node(then),
                 "else": self.parser._as_node(els),
+            },
+        )
+
+    def resolve_ts(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        left, right = items
+        return Expression(
+            "RESOLVE_TIMESTAMP",
+            {
+                "date": self.parser._as_node(left),
+                "time": self.parser._as_node(right),
             },
         )
 
