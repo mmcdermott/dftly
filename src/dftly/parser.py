@@ -172,10 +172,9 @@ class Parser:
             return None
 
         # parse right side first to determine missing pieces
-        right_parsed = (
-            self._parse_datetime_string(right_text)
-            or self._parse_time_string(right_text)
-        )
+        right_parsed = self._parse_datetime_string(
+            right_text
+        ) or self._parse_time_string(right_text)
         if right_parsed is None:
             return None
 
