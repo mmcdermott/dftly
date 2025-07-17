@@ -13,6 +13,12 @@ data, deftly!
 
 `pip install dftly`
 
+To enable the optional polars execution engine, install with the extra:
+
+```bash
+pip install "dftly[polars]"
+```
+
 ## Usage
 
 To parse a YAML mapping of output columns to operations, use `dftly.from_yaml`:
@@ -32,6 +38,17 @@ defined in `src/dftly/grammar.lark`, making the
 implementation extensible beyond the simple examples shown above.
 
 The returned object contains instances of `dftly.Expression`, `dftly.Column`, and `dftly.Literal` representing the fully resolved operations.
+
+If `polars` is installed, you can convert these resolved operations to `polars` expressions:
+
+```python
+import polars as pl
+from dftly.polars import to_polars
+
+df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
+expr = to_polars(result["a"])
+df = df.with_columns(a=expr)
+```
 
 ## Design Documentation
 

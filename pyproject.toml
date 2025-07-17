@@ -24,6 +24,7 @@ dependencies = ["PyYAML", "lark", "python-dateutil"]
 # Development dependencies
 dev = ["pre-commit<4", "ruff"]
 tests = ["pytest", "pytest-cov"]
+polars = ["polars"]
 
 [project.urls]
 Homepage = "https://github.com/mmcdermott/dftly"
