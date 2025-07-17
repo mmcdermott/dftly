@@ -1,0 +1,19 @@
+%import common.CNAME -> NAME
+%import common.WS
+%ignore WS
+
+PLUS: "+"
+MINUS: "-"
+AS: /as/i
+IF: /if/i
+ELSE: /else/i
+
+start: expr
+expr: conditional
+conditional: additive IF additive ELSE conditional   -> ifexpr
+          | additive
+additive: cast_expr op*
+op: PLUS cast_expr     -> plus
+  | MINUS cast_expr    -> minus
+cast_expr: NAME AS NAME   -> cast
+         | NAME           -> name

@@ -13,7 +13,23 @@ data, deftly!
 
 ## Usage
 
-**TODO**
+To parse a YAML mapping of output columns to operations, use `dftly.from_yaml`:
+
+```python
+from dftly import from_yaml
+
+text = """
+a: col1 + col2
+b: foo as int
+"""
+result = from_yaml(text, input_schema={"col1": "int", "col2": "int", "foo": "str"})
+```
+
+String expressions are parsed using a [Lark](https://github.com/lark-parser/lark) grammar
+defined in `src/dftly/grammar.lark`, making the
+implementation extensible beyond the simple examples shown above.
+
+The returned object contains instances of `dftly.Expression`, `dftly.Column`, and `dftly.Literal` representing the fully resolved operations.
 
 ## Design Documentation
 
@@ -90,7 +106,7 @@ objects, obeying one of the following simple templates:
 
 #### Literals
 
-Literals are simple string or typed literals (type determined via OmegaConf). They are expressed via a
+Literals are simple string or typed literals (type determined by the YAML parser). They are expressed via a
 one-element map with the key `literal` and the value being the literal value itself. For example:
 
 ```yaml
