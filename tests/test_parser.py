@@ -43,3 +43,33 @@ def test_parse_subtract_and_cast_and_conditional():
     cond = result["c"]
     assert isinstance(cond, Expression)
     assert cond.type == "CONDITIONAL"
+
+
+def test_parse_resolve_timestamp_string_form():
+    text = """
+    a: charttime @ 11:59:59 p.m.
+    b: birth_year @ January 1, 12:00 a.m.
+    """
+    schema = {"charttime": "date", "birth_year": "int"}
+    result = from_yaml(text, input_schema=schema)
+
+    a_expr = result["a"]
+    assert isinstance(a_expr, Expression)
+    assert a_expr.type == "RESOLVE_TIMESTAMP"
+    a_args = a_expr.arguments
+    assert "date" in a_args and "time" in a_args
+    assert isinstance(a_args["date"], Column)
+    assert a_args["date"].name == "charttime"
+    time_args = a_args["time"]
+    assert time_args["hour"].value == 23
+    assert time_args["minute"].value == 59
+    assert time_args["second"].value == 59
+
+    b_expr = result["b"]
+    assert isinstance(b_expr, Expression)
+    assert b_expr.type == "RESOLVE_TIMESTAMP"
+    b_args = b_expr.arguments
+    date_args = b_args["date"]
+    assert date_args["year"].name == "birth_year"
+    assert date_args["month"].value == 1
+    assert date_args["day"].value == 1
