@@ -1,9 +1,3 @@
-import pytest
-
-# allow pytest.importorskip before importing polars
-# ruff: noqa: E402
-
-polars = pytest.importorskip("polars")
 import polars as pl
 
 from dftly import from_yaml
