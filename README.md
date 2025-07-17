@@ -5,7 +5,9 @@ transformations over dataframes, designed for expression in YAML files. With dft
 data, deftly!
 
 > [!WARNING]
-> This does not work at all yet. This is just mostly speculative.
+> This does not work at all yet. This is just mostly speculative. What code is here was written by ChatGPT
+> Codex and only modestly checked. The design specification below is my work, but the code itself is AI
+> generated.
 
 ## Installation
 
