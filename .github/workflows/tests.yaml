@@ -35,6 +35,14 @@ jobs:
         run: |
           pytest -v --doctest-modules --cov=src --junitxml=junit.xml -s --ignore=docs
 
+      - name: Install polars
+        run: |
+          pip install polars
+
+      - name: Run tests with polars
+        run: |
+          pytest -v --doctest-modules --cov=src -s --ignore=docs
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4.0.1
         with:
