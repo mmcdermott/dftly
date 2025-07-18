@@ -73,3 +73,56 @@ def test_parse_resolve_timestamp_string_form():
     assert date_args["year"].name == "birth_year"
     assert date_args["month"].value == 1
     assert date_args["day"].value == 1
+
+
+def test_parse_boolean_and_coalesce():
+    text = """
+    a: flag1 and flag2
+    b: flag1 or flag2
+    c: not flag1
+    d:
+      - col1
+      - col2
+    """
+    schema = {"flag1": "bool", "flag2": "bool", "col1": "int", "col2": "int"}
+    result = from_yaml(text, input_schema=schema)
+
+    and_expr = result["a"]
+    assert isinstance(and_expr, Expression)
+    assert and_expr.type == "AND"
+
+    or_expr = result["b"]
+    assert isinstance(or_expr, Expression)
+    assert or_expr.type == "OR"
+
+    not_expr = result["c"]
+    assert isinstance(not_expr, Expression)
+    assert not_expr.type == "NOT"
+
+    coalesce_expr = result["d"]
+    assert isinstance(coalesce_expr, Expression)
+    assert coalesce_expr.type == "COALESCE"
+
+
+def test_parse_value_in_set_and_range():
+    text = """
+    a:
+      value_in_literal_set:
+        value: col1
+        set: [1, 2]
+    b:
+      value_in_range:
+        value: col1
+        min: 0
+        max: 10
+    """
+    schema = {"col1": "int"}
+    result = from_yaml(text, input_schema=schema)
+
+    in_set = result["a"]
+    assert isinstance(in_set, Expression)
+    assert in_set.type == "VALUE_IN_LITERAL_SET"
+
+    in_range = result["b"]
+    assert isinstance(in_range, Expression)
+    assert in_range.type == "VALUE_IN_RANGE"

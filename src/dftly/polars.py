@@ -53,6 +53,21 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
     if typ == "SUBTRACT":
         left, right = args
         return to_polars(left) - to_polars(right)
+    if typ == "COALESCE":
+        return pl.coalesce([to_polars(arg) for arg in args])
+    if typ == "AND":
+        expr = to_polars(args[0])
+        for arg in args[1:]:
+            expr = expr & to_polars(arg)
+        return expr
+    if typ == "OR":
+        expr = to_polars(args[0])
+        for arg in args[1:]:
+            expr = expr | to_polars(arg)
+        return expr
+    if typ == "NOT":
+        (arg,) = args
+        return ~to_polars(arg)
     if typ == "TYPE_CAST":
         inp = to_polars(args["input"])
         out_type = args["output_type"].value
@@ -66,6 +81,27 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
         )
     if typ == "RESOLVE_TIMESTAMP":
         return _resolve_timestamp(args)
+    if typ == "VALUE_IN_LITERAL_SET":
+        value = to_polars(args["value"])
+        set_arg = args["set"]
+        if isinstance(set_arg, Expression) and set_arg.type == "COALESCE":
+            items = set_arg.arguments
+        else:
+            items = set_arg
+        set_vals = [v.value if isinstance(v, Literal) else None for v in items]
+        return value.is_in(set_vals)
+    if typ == "VALUE_IN_RANGE":
+        value = to_polars(args["value"])
+        expr = pl.lit(True)
+        if "min" in args:
+            min_expr = to_polars(args["min"])
+            incl = args.get("min_inclusive", Literal(True)).value
+            expr = expr & (value >= min_expr if incl else value > min_expr)
+        if "max" in args:
+            max_expr = to_polars(args["max"])
+            incl = args.get("max_inclusive", Literal(True)).value
+            expr = expr & (value <= max_expr if incl else value < max_expr)
+        return expr
 
     raise ValueError(f"Unsupported expression type: {expr.type}")
 

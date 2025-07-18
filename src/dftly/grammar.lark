@@ -1,4 +1,3 @@
-%import common.CNAME -> NAME
 %import common.WS
 %ignore WS
 
@@ -8,11 +7,21 @@ AT: "@"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
+AND.2: "and"i
+OR.2: "or"i
+NOT.2: "not"i
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
 
 start: expr
 expr: conditional
-conditional: additive IF additive ELSE conditional   -> ifexpr
-          | additive
+conditional: bool_expr IF bool_expr ELSE conditional   -> ifexpr
+          | bool_expr
+
+?bool_expr: and_expr (OR and_expr)*   -> or_expr
+?and_expr: unary (AND unary)*         -> and_expr
+?unary: NOT unary                    -> not_expr
+      | additive
+
 additive: at_expr op*
 op: PLUS cast_expr     -> plus
   | MINUS cast_expr    -> minus
