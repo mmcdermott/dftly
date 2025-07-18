@@ -49,7 +49,10 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
     args = expr.arguments
 
     if typ == "ADD":
-        return sum(to_polars(arg) for arg in args)
+        expr = to_polars(args[0])
+        for arg in args[1:]:
+            expr = expr + to_polars(arg)
+        return expr
     if typ == "SUBTRACT":
         left, right = args
         return to_polars(left) - to_polars(right)
