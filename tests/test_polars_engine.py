@@ -59,3 +59,49 @@ def test_polars_resolve_timestamp():
     out = df.with_columns(a=expr).get_column("a")
     assert out[0].hour == 23 and out[0].minute == 59 and out[0].second == 59
     assert out[1].hour == 23 and out[1].minute == 59 and out[1].second == 59
+
+
+def test_polars_boolean_and_coalesce_and_membership():
+    text = """
+    a: flag1 and flag2
+    b: not flag1
+    c:
+      - col1
+      - col2
+    d:
+      value_in_literal_set:
+        value: col1
+        set: [1, 2]
+    e:
+      value_in_range:
+        value: col1
+        min: 0
+        max: 2
+    """
+    schema = {
+        "flag1": "bool",
+        "flag2": "bool",
+        "col1": "int",
+        "col2": "int",
+    }
+    result = from_yaml(text, input_schema=schema)
+    df = pl.DataFrame(
+        {
+            "flag1": [True, False],
+            "flag2": [True, True],
+            "col1": [1, 3],
+            "col2": [5, 6],
+        }
+    )
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+        d=to_polars(result["d"]),
+        e=to_polars(result["e"]),
+    )
+    assert out.get_column("a").to_list() == [True, False]
+    assert out.get_column("b").to_list() == [False, True]
+    assert out.get_column("c").to_list() == [1, 3]
+    assert out.get_column("d").to_list() == [True, False]
+    assert out.get_column("e").to_list() == [True, False]

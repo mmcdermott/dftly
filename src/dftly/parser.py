@@ -6,7 +6,7 @@ from datetime import datetime
 from dateutil import parser as dtparser
 
 from importlib.resources import files
-from lark import Lark, Transformer
+from lark import Lark, Transformer, Token
 from .nodes import Column, Expression, Literal
 
 # ---------------------------------------------------------------------------
@@ -247,6 +247,22 @@ class DftlyTransformer(Transformer):
         if all(sym == "-" for sym in symbols) and len(symbols) == 1:
             return Expression("SUBTRACT", [base, operands[0]])
         raise ValueError("invalid arithmetic expression")
+
+    def and_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
+        args = [self.parser._as_node(i) for i in items if not isinstance(i, Token)]
+        if len(args) == 1:
+            return args[0]
+        return Expression("AND", args)
+
+    def or_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
+        args = [self.parser._as_node(i) for i in items if not isinstance(i, Token)]
+        if len(args) == 1:
+            return args[0]
+        return Expression("OR", args)
+
+    def not_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        item = items[-1]
+        return Expression("NOT", [self.parser._as_node(item)])
 
     def ifexpr(self, items: list[Any]) -> Expression:  # type: ignore[override]
         then = items[0]
