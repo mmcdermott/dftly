@@ -14,6 +14,27 @@ def test_polars_addition():
     assert out.to_list() == [4, 6]
 
 
+def test_polars_datetime_plus_duration():
+    text = "a: dt + dur"
+    result = from_yaml(text, input_schema={"dt": "datetime", "dur": "duration"})
+    expr = to_polars(result["a"])
+
+    from datetime import datetime, timedelta
+
+    df = pl.DataFrame(
+        {
+            "dt": [
+                datetime(2024, 1, 1, 1, 0, 0),
+                datetime(2024, 1, 1, 2, 0, 0),
+            ],
+            "dur": [timedelta(minutes=30), timedelta(minutes=45)],
+        }
+    )
+    out = df.with_columns(a=expr).get_column("a")
+    assert out[0] == datetime(2024, 1, 1, 1, 30, 0)
+    assert out[1] == datetime(2024, 1, 1, 2, 45, 0)
+
+
 def test_polars_subtract():
     text = "a: col1 - col2"
     result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
