@@ -4,6 +4,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 import re
 from datetime import datetime
 from dateutil import parser as dtparser
+import string
 
 from importlib.resources import files
 from lark import Lark, Transformer, Token
@@ -31,6 +32,24 @@ DATE_TIME_RE = re.compile(
     r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2}),\s*(?P<time>.+)$",
     re.IGNORECASE,
 )
+
+# supported expression names for dictionary short-form
+_EXPR_TYPES = {
+    "ADD",
+    "SUBTRACT",
+    "COALESCE",
+    "AND",
+    "OR",
+    "NOT",
+    "TYPE_CAST",
+    "CONDITIONAL",
+    "RESOLVE_TIMESTAMP",
+    "VALUE_IN_LITERAL_SET",
+    "VALUE_IN_RANGE",
+    "STRING_INTERPOLATE",
+    "PARSE_WITH_FORMAT_STRING",
+    "HASH_TO_INT",
+}
 
 
 class Parser:
@@ -75,9 +94,20 @@ class Parser:
         # dictionary short form for expressions
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))
-            parsed_args = self._parse_arguments(args)
-            return Expression(expr_type.upper(), parsed_args)
-        raise ValueError("invalid mapping input")
+            expr_upper = expr_type.upper()
+            if expr_upper in _EXPR_TYPES:
+                if expr_upper == "STRING_INTERPOLATE" and isinstance(args, Mapping):
+                    pattern = args.get("pattern")
+                    inputs = args.get("inputs", {})
+                    pattern_node = pattern if isinstance(pattern, Literal) else Literal(pattern)
+                    parsed_inputs = {k: self._parse_value(v) for k, v in inputs.items()}
+                    parsed_args = {"pattern": pattern_node, "inputs": parsed_inputs}
+                else:
+                    parsed_args = self._parse_arguments(args)
+                return Expression(expr_upper, parsed_args)
+
+        # generic mapping value
+        return {k: self._parse_value(v) for k, v in value.items()}
 
     # ------------------------------------------------------------------
     def _parse_arguments(self, args: Any) -> Any:
@@ -95,6 +125,10 @@ class Parser:
             resolved = self._parse_resolve_timestamp(value)
             if resolved is not None:
                 return resolved
+
+        interp = self._parse_string_interpolate(value)
+        if interp is not None:
+            return interp
 
         try:
             tree = self._lark.parse(value)
@@ -184,6 +218,29 @@ class Parser:
             args["date"] = self._as_node(left_node)
 
         return Expression("RESOLVE_TIMESTAMP", args)
+
+    def _parse_string_interpolate(self, text: str) -> Optional[Expression]:
+        """Parse python string interpolation syntax."""
+        if "{" not in text or "}" not in text:
+            return None
+
+        pieces = list(string.Formatter().parse(text))
+        if not any(field for _, field, _, _ in pieces if field is not None):
+            return None
+
+        inputs: Dict[str, Any] = {}
+        for _, field_name, _, _ in pieces:
+            if field_name is None:
+                continue
+            inputs[field_name] = self._parse_string(field_name)
+
+        return Expression(
+            "STRING_INTERPOLATE",
+            {
+                "pattern": Literal(text),
+                "inputs": inputs,
+            },
+        )
 
 
 class DftlyTransformer(Transformer):

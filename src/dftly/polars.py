@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Mapping
+import string
 
 try:
     import polars as pl
@@ -84,6 +85,24 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
         )
     if typ == "RESOLVE_TIMESTAMP":
         return _resolve_timestamp(args)
+    if typ == "STRING_INTERPOLATE":
+        pattern = args["pattern"]
+        if isinstance(pattern, Literal):
+            pattern = pattern.value
+        inputs = args.get("inputs", {})
+        if isinstance(inputs, Mapping):
+            order = []
+            fmt_parts = []
+            for literal, field, _, _ in string.Formatter().parse(pattern):
+                fmt_parts.append(literal)
+                if field is not None:
+                    fmt_parts.append("{}")
+                    order.append(field)
+            pattern = "".join(fmt_parts)
+            exprs = [to_polars(inputs[field]) for field in order]
+        else:
+            exprs = []
+        return pl.format(pattern, *exprs)
     if typ == "VALUE_IN_LITERAL_SET":
         value = to_polars(args["value"])
         set_arg = args["set"]

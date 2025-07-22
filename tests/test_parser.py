@@ -24,6 +24,30 @@ def test_parse_literal_string():
     assert lit.value == "hello"
 
 
+def test_parse_string_interpolate_dict_and_string_forms():
+    text = """
+    a:
+      string_interpolate:
+        pattern: "hello {col1}"
+        inputs:
+          col1: col1
+    b: "hello {col1}"
+    """
+    schema = {"col1": "int"}
+    result = from_yaml(text, input_schema=schema)
+
+    a_expr = result["a"]
+    assert isinstance(a_expr, Expression)
+    assert a_expr.type == "STRING_INTERPOLATE"
+    assert isinstance(a_expr.arguments["pattern"], Literal)
+    assert a_expr.arguments["pattern"].value == "hello {col1}"
+    assert isinstance(a_expr.arguments["inputs"]["col1"], Column)
+
+    b_expr = result["b"]
+    assert isinstance(b_expr, Expression)
+    assert b_expr.type == "STRING_INTERPOLATE"
+
+
 def test_parse_subtract_and_cast_and_conditional():
     text = """
     a: col1 - col2
