@@ -41,11 +41,19 @@ d:
 e: chartdate @ 11:59:59 p.m.
 """
 
-SCHEMA = {"col1": "int", "col2": "int", "col3": "int", "flag": "bool", "chartdate": "date"}
+SCHEMA = {
+    "col1": "int",
+    "col2": "int",
+    "col3": "int",
+    "flag": "bool",
+    "chartdate": "date",
+}
 
 
 def test_polars_integration_complex_csv_yaml():
-    df = pl.read_csv(io.StringIO(CSV_TEXT), dtypes={"flag": pl.Boolean, "chartdate": pl.Date})
+    df = pl.read_csv(
+        io.StringIO(CSV_TEXT), dtypes={"flag": pl.Boolean, "chartdate": pl.Date}
+    )
     result = from_yaml(YAML_TEXT, input_schema=SCHEMA)
     exprs = map_to_polars(result)
     out = df.with_columns(**exprs)
