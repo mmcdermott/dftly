@@ -1,7 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, List, Mapping, Optional, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    TYPE_CHECKING,
+    Union,
+)
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from .parser import Parser
 
 
 class NodeBase:
@@ -88,7 +100,9 @@ class Column(NodeBase):
             typ = None if input_schema is None else input_schema.get(value)
             return {"name": value, "type": typ}
         if isinstance(value, Mapping):
-            cls._validate_keys(value, {"name", "type"}, label="column", required={"name"})
+            cls._validate_keys(
+                value, {"name", "type"}, label="column", required={"name"}
+            )
             name = value["name"]
             typ = value.get("type")
             if typ is None and input_schema is not None:
@@ -120,11 +134,13 @@ class Expression(NodeBase):
         cls,
         value: Any,
         *,
-        parser: "Parser",  # type: ignore[name-defined]
+        parser: "Parser",
     ) -> Mapping[str, Any]:
         if not isinstance(value, Mapping):
             raise TypeError("expression value must be a mapping")
-        cls._validate_keys(value, {"type", "arguments"}, label="expression", required={"type"})
+        cls._validate_keys(
+            value, {"type", "arguments"}, label="expression", required={"type"}
+        )
         expr_type = value["type"]
         args = value.get("arguments", [])
         parsed_args = parser._parse_arguments(args)
