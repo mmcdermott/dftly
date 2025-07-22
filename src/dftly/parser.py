@@ -65,21 +65,13 @@ class Parser:
     # ------------------------------------------------------------------
     def _parse_mapping(self, value: Mapping[str, Any]) -> Any:
         if "literal" in value:
-            return Literal(value["literal"])
+            return Literal.from_mapping(value)
+
         if "column" in value:
-            col_val = value["column"]
-            if isinstance(col_val, str):
-                return Column(col_val, self.input_schema.get(col_val))
-            if isinstance(col_val, Mapping):
-                name = col_val.get("name")
-                typ = col_val.get("type", self.input_schema.get(name))
-                return Column(name, typ)
+            return Column.from_mapping(value, input_schema=self.input_schema)
+
         if "expression" in value:
-            expr = value["expression"]
-            expr_type = expr.get("type")
-            args = expr.get("arguments", [])
-            parsed_args = self._parse_arguments(args)
-            return Expression(expr_type, parsed_args)
+            return Expression.from_mapping(value, parser=self)
         # dictionary short form for expressions
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))

@@ -1,3 +1,4 @@
+import pytest
 from dftly import from_yaml, Column, Expression, Literal
 
 
@@ -126,3 +127,54 @@ def test_parse_value_in_set_and_range():
     in_range = result["b"]
     assert isinstance(in_range, Expression)
     assert in_range.type == "VALUE_IN_RANGE"
+
+
+def test_parse_fully_resolved_forms():
+    text = """
+    a:
+      literal: 5
+    b:
+      column:
+        name: col1
+        type: int
+    c:
+      expression:
+        type: ADD
+        arguments:
+          - {column: {name: col1, type: int}}
+          - {literal: 1}
+    """
+    schema = {"col1": "int"}
+    result = from_yaml(text, input_schema=schema)
+
+    lit = result["a"]
+    assert isinstance(lit, Literal)
+    assert lit.value == 5
+
+    col = result["b"]
+    assert isinstance(col, Column)
+    assert col.name == "col1" and col.type == "int"
+
+    expr = result["c"]
+    assert isinstance(expr, Expression)
+    assert expr.type == "ADD"
+    assert isinstance(expr.arguments, list)
+    assert isinstance(expr.arguments[0], Column)
+    assert isinstance(expr.arguments[1], Literal)
+
+
+def test_invalid_keys_raise_error():
+    with pytest.raises(ValueError):
+        from_yaml("a: {literal: 1, extra: 2}")
+
+    with pytest.raises(ValueError):
+        from_yaml("a: {column: col1, bad: 1}")
+
+    with pytest.raises(ValueError):
+        from_yaml("a: {column: {name: col1, type: int, extra: 1}}")
+
+    with pytest.raises(ValueError):
+        from_yaml("a: {expression: {type: ADD, arguments: [], extra: 1}}")
+
+    with pytest.raises(ValueError):
+        from_yaml("a: {expression: {arguments: []}}")
