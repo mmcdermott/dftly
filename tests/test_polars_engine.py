@@ -155,3 +155,21 @@ def test_polars_string_interpolate():
     )
     assert out.get_column("a").to_list() == ["hello 1!", "hello 2!"]
     assert out.get_column("b").to_list() == ["hey 1!", "hey 2!"]
+
+
+def test_polars_regex_operations():
+    text = """
+    a: extract (\\d+) from col1
+    b: match foo against col2
+    c: not match foo against col2
+    """
+    result = from_yaml(text, input_schema={"col1": "str", "col2": "str"})
+    df = pl.DataFrame({"col1": ["abc123", "def456"], "col2": ["foo", "bar"]})
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+    )
+    assert out.get_column("a").to_list() == ["123", "456"]
+    assert out.get_column("b").to_list() == [True, False]
+    assert out.get_column("c").to_list() == [False, True]

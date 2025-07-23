@@ -33,6 +33,16 @@ DATE_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
+_REGEX_EXTRACT_RE = re.compile(
+    r"^extract(?:\s+group\s+(?P<group>\d+)\s+of)?\s+(?P<regex>.+?)\s+from\s+(?P<input>.+)$",
+    re.IGNORECASE,
+)
+
+_REGEX_MATCH_RE = re.compile(
+    r"^(?P<neg>not\s+)?match\s+(?P<regex>.+?)\s+against\s+(?P<input>.+)$",
+    re.IGNORECASE,
+)
+
 # supported expression names for dictionary short-form
 _EXPR_TYPES = {
     "ADD",
@@ -49,6 +59,7 @@ _EXPR_TYPES = {
     "STRING_INTERPOLATE",
     "PARSE_WITH_FORMAT_STRING",
     "HASH_TO_INT",
+    "REGEX",
 }
 
 
@@ -95,6 +106,19 @@ class Parser:
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))
             expr_upper = expr_type.upper()
+            if expr_type in {
+                "regex_extract",
+                "regex_match",
+                "regex_not_match",
+            } and isinstance(args, Mapping):
+                action_map = {
+                    "regex_extract": "EXTRACT",
+                    "regex_match": "MATCH",
+                    "regex_not_match": "NOT_MATCH",
+                }
+                parsed_args = self._parse_arguments(args)
+                parsed_args.setdefault("action", Literal(action_map[expr_type]))
+                return Expression("REGEX", parsed_args)
             if expr_upper in _EXPR_TYPES:
                 if expr_upper == "STRING_INTERPOLATE" and isinstance(args, Mapping):
                     pattern = args.get("pattern")
@@ -131,6 +155,10 @@ class Parser:
         interp = self._parse_string_interpolate(value)
         if interp is not None:
             return interp
+
+        regex_expr = self._parse_regex_string(value)
+        if regex_expr is not None:
+            return regex_expr
 
         try:
             tree = self._lark.parse(value)
@@ -220,6 +248,35 @@ class Parser:
             args["date"] = self._as_node(left_node)
 
         return Expression("RESOLVE_TIMESTAMP", args)
+
+    def _parse_regex_string(self, text: str) -> Optional[Expression]:
+        match = _REGEX_EXTRACT_RE.match(text)
+        if match:
+            regex = match.group("regex")
+            group = match.group("group")
+            input_text = match.group("input")
+            args: Dict[str, Any] = {
+                "regex": Literal(regex),
+                "action": Literal("EXTRACT"),
+                "input": self._parse_string(input_text),
+            }
+            if group is not None:
+                args["group"] = Literal(int(group))
+            return Expression("REGEX", args)
+
+        match = _REGEX_MATCH_RE.match(text)
+        if match:
+            regex = match.group("regex")
+            input_text = match.group("input")
+            neg = match.group("neg")
+            action = "NOT_MATCH" if neg else "MATCH"
+            args = {
+                "regex": Literal(regex),
+                "action": Literal(action),
+                "input": self._parse_string(input_text),
+            }
+            return Expression("REGEX", args)
+        return None
 
     def _parse_string_interpolate(self, text: str) -> Optional[Expression]:
         """Parse python string interpolation syntax."""
