@@ -165,6 +165,28 @@ def test_parse_value_in_set_and_range():
     assert in_range.type == "VALUE_IN_RANGE"
 
 
+def test_parse_in_operator_string_forms():
+    text = """
+    a: col1 in {1, 2}
+    b: col1 in (0, 2]
+    """
+    result = from_yaml(text, input_schema={"col1": "int"})
+
+    in_set = result["a"]
+    assert isinstance(in_set, Expression)
+    assert in_set.type == "VALUE_IN_LITERAL_SET"
+    vals = in_set.arguments["set"]
+    assert all(isinstance(v, Literal) for v in vals)
+    assert [v.value for v in vals] == [1, 2]
+
+    in_range = result["b"]
+    assert isinstance(in_range, Expression)
+    assert in_range.type == "VALUE_IN_RANGE"
+    args = in_range.arguments
+    assert args["min_inclusive"].value is False
+    assert args["max_inclusive"].value is True
+
+
 def test_parse_fully_resolved_forms():
     text = """
     a:

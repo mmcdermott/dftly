@@ -194,10 +194,6 @@ class Parser:
             if resolved is not None:
                 return resolved
 
-        interp = self._parse_string_interpolate(value)
-        if interp is not None:
-            return interp
-
         regex_expr = self._parse_regex_string(value)
         if regex_expr is not None:
             return regex_expr
@@ -220,7 +216,13 @@ class Parser:
             result = self._transformer.transform(tree)
             return result
         except Exception:
-            return self._as_node(value)
+            pass
+
+        interp = self._parse_string_interpolate(value)
+        if interp is not None:
+            return interp
+
+        return self._as_node(value)
 
     # ------------------------------------------------------------------
     def _infer_output_type(self, fmt: str) -> str:
@@ -381,6 +383,17 @@ class DftlyTransformer(Transformer):
     def NAME(self, token: Any) -> str:  # type: ignore[override]
         return str(token)
 
+    def NUMBER(self, token: Any) -> str:  # type: ignore[override]
+        return str(token)
+
+    def number(self, items: list[str]) -> Literal:  # type: ignore[override]
+        (text,) = items
+        if "." in text:
+            val: Any = float(text)
+        else:
+            val = int(text)
+        return Literal(val)
+
     def name(self, items: list[str]) -> str:  # type: ignore[override]
         (val,) = items
         return val
@@ -416,6 +429,63 @@ class DftlyTransformer(Transformer):
         args = items[1] if len(items) > 1 else []
         parsed_args = [self.parser._as_node(a) for a in args]
         return Expression(name.upper(), parsed_args)
+
+    def literal_set(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
+        if not items:
+            return []
+        (vals,) = items
+        return [self.parser._as_node(v) for v in vals]
+
+    def range_inc(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
+        low, high = items
+        return {
+            "min": self.parser._as_node(low),
+            "max": self.parser._as_node(high),
+            "min_inclusive": Literal(True),
+            "max_inclusive": Literal(True),
+        }
+
+    def range_ie(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
+        low, high = items
+        return {
+            "min": self.parser._as_node(low),
+            "max": self.parser._as_node(high),
+            "min_inclusive": Literal(True),
+            "max_inclusive": Literal(False),
+        }
+
+    def range_ei(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
+        low, high = items
+        return {
+            "min": self.parser._as_node(low),
+            "max": self.parser._as_node(high),
+            "min_inclusive": Literal(False),
+            "max_inclusive": Literal(True),
+        }
+
+    def range_exc(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
+        low, high = items
+        return {
+            "min": self.parser._as_node(low),
+            "max": self.parser._as_node(high),
+            "min_inclusive": Literal(False),
+            "max_inclusive": Literal(False),
+        }
+
+    def value_in_set(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        value = items[0]
+        set_vals = items[-1]
+        return Expression(
+            "VALUE_IN_LITERAL_SET",
+            {"value": self.parser._as_node(value), "set": set_vals},
+        )
+
+    def value_in_range(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        value = items[0]
+        range_args = items[-1]
+        args = dict(range_args)
+        args["value"] = self.parser._as_node(value)
+        return Expression("VALUE_IN_RANGE", args)
 
     def plus(self, items: list[Any]) -> Tuple[str, Any]:  # type: ignore[override]
         _, val = items
