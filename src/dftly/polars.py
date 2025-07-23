@@ -124,6 +124,28 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
             incl = args.get("max_inclusive", Literal(True)).value
             expr = expr & (value <= max_expr if incl else value < max_expr)
         return expr
+    if typ == "REGEX":
+        pattern_node = args["regex"]
+        if isinstance(pattern_node, Literal):
+            pattern = pattern_node.value
+        else:
+            pattern = pattern_node
+        inp = to_polars(args["input"])
+        action = args.get("action")
+        if isinstance(action, Literal):
+            action = action.value
+        if action == "EXTRACT":
+            group = args.get("group", Literal(1))
+            if isinstance(group, Literal):
+                group_idx = group.value
+            else:
+                group_idx = group
+            return inp.str.extract(pattern, group_idx)
+        if action == "MATCH":
+            return inp.str.contains(pattern)
+        if action == "NOT_MATCH":
+            return ~inp.str.contains(pattern)
+        raise ValueError("Invalid REGEX action")
 
     raise ValueError(f"Unsupported expression type: {expr.type}")
 

@@ -214,3 +214,34 @@ def test_invalid_keys_raise_error():
 
     with pytest.raises(ValueError):
         from_yaml("a: {expression: {arguments: []}}")
+
+
+def test_parse_regex_dict_and_string_forms():
+    text = """
+    a:
+      regex_extract:
+        regex: '(\\d+)'
+        input: col1
+        group: 1
+    b: extract (\\d+) from col1
+    c: match foo against col2
+    d: not match foo against col2
+    """
+    schema = {"col1": "str", "col2": "str"}
+    result = from_yaml(text, input_schema=schema)
+
+    a_expr = result["a"]
+    assert isinstance(a_expr, Expression) and a_expr.type == "REGEX"
+    assert a_expr.arguments["action"].value == "EXTRACT"
+
+    b_expr = result["b"]
+    assert isinstance(b_expr, Expression) and b_expr.type == "REGEX"
+    assert b_expr.arguments["action"].value == "EXTRACT"
+
+    c_expr = result["c"]
+    assert isinstance(c_expr, Expression) and c_expr.type == "REGEX"
+    assert c_expr.arguments["action"].value == "MATCH"
+
+    d_expr = result["d"]
+    assert isinstance(d_expr, Expression) and d_expr.type == "REGEX"
+    assert d_expr.arguments["action"].value == "NOT_MATCH"
