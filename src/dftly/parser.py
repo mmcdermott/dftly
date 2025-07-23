@@ -99,7 +99,9 @@ class Parser:
                 if expr_upper == "STRING_INTERPOLATE" and isinstance(args, Mapping):
                     pattern = args.get("pattern")
                     inputs = args.get("inputs", {})
-                    pattern_node = pattern if isinstance(pattern, Literal) else Literal(pattern)
+                    pattern_node = (
+                        pattern if isinstance(pattern, Literal) else Literal(pattern)
+                    )
                     parsed_inputs = {k: self._parse_value(v) for k, v in inputs.items()}
                     parsed_args = {"pattern": pattern_node, "inputs": parsed_inputs}
                 else:
