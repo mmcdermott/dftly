@@ -27,5 +27,9 @@ op: PLUS cast_expr     -> plus
   | MINUS cast_expr    -> minus
 ?at_expr: cast_expr AT cast_expr   -> resolve_ts
         | cast_expr
-cast_expr: NAME AS NAME   -> cast
+cast_expr: call_expr
+         | NAME AS NAME   -> cast
          | NAME           -> name
+
+call_expr: NAME "(" [args] ")"   -> func
+args: expr ("," expr)*   -> arg_list

@@ -16,6 +16,18 @@ def test_parse_addition():
     assert args[1].name == "col2"
 
 
+def test_parse_function_call():
+    text = "a: add(col1, col2)"
+    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    expr = result["a"]
+    assert isinstance(expr, Expression)
+    assert expr.type == "ADD"
+    args = expr.arguments
+    assert isinstance(args, list) and len(args) == 2
+    assert isinstance(args[0], Column) and args[0].name == "col1"
+    assert isinstance(args[1], Column) and args[1].name == "col2"
+
+
 def test_parse_literal_string():
     text = "a: hello"
     result = from_yaml(text)
