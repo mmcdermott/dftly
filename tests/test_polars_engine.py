@@ -283,3 +283,36 @@ def test_polars_parse_extended_numeric_and_duration_forms():
     assert out.get_column("d")[0].total_seconds() == 35 * 24 * 3600
     for key in "ae":
         assert out.get_column(key).to_list() == out.get_column("a").to_list()
+
+
+def _md5_int(val: str) -> int:
+    import hashlib
+
+    h = hashlib.md5(str(val).encode())
+    return int.from_bytes(h.digest()[:8], "big", signed=False)
+
+
+def test_polars_hash_to_int_forms():
+    text = """
+    a: hash_to_int(col1)
+    b:
+      hash_to_int:
+        input: col1
+        algorithm: md5
+    c: hash(col1)
+    """
+    result = from_yaml(text, input_schema={"col1": "str"})
+    df = pl.DataFrame({"col1": ["foo", "bar"]})
+
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+    )
+
+    expected_a = df.get_column("col1").hash().to_list()
+    expected_b = [_md5_int(v) for v in ["foo", "bar"]]
+
+    assert out.get_column("a").to_list() == expected_a
+    assert out.get_column("c").to_list() == expected_a
+    assert out.get_column("b").to_list() == expected_b
