@@ -106,7 +106,11 @@ class Parser:
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))
             expr_upper = expr_type.upper()
-            if expr_type in {"regex_extract", "regex_match", "regex_not_match"} and isinstance(args, Mapping):
+            if expr_type in {
+                "regex_extract",
+                "regex_match",
+                "regex_not_match",
+            } and isinstance(args, Mapping):
                 action_map = {
                     "regex_extract": "EXTRACT",
                     "regex_match": "MATCH",
