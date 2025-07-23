@@ -126,6 +126,32 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
             incl = args.get("max_inclusive", Literal(True)).value
             expr = expr & (value <= max_expr if incl else value < max_expr)
         return expr
+    if typ == "HASH_TO_INT":
+        if isinstance(args, Mapping):
+            inp = args.get("input")
+            alg = args.get("algorithm")
+        else:
+            inp = args[0]
+            alg = args[1] if len(args) > 1 else None
+        expr_inp = to_polars(inp)
+        if isinstance(alg, Literal):
+            alg_val = alg.value
+        elif alg is None:
+            alg_val = None
+        else:
+            alg_val = alg
+        if alg_val is None:
+            return expr_inp.hash()
+        import hashlib
+
+        def _hash_func(val: Any, algorithm: str = str(alg_val)) -> int | None:
+            if val is None:
+                return None
+            h = hashlib.new(algorithm)
+            h.update(str(val).encode())
+            return int.from_bytes(h.digest()[:8], "big", signed=False)
+
+        return expr_inp.map_elements(_hash_func, return_dtype=pl.UInt64)
     if typ == "REGEX":
         pattern_node = args["regex"]
         if isinstance(pattern_node, Literal):

@@ -378,3 +378,27 @@ def test_parse_extended_numeric_and_duration_formats():
             assert expr.arguments["output_type"].value == "float"
         if key in {"f", "g"}:
             assert expr.arguments["output_type"].value == "int"
+
+
+def test_parse_hash_to_int_and_hash_forms():
+    text = """
+    a:
+      hash_to_int:
+        input: col1
+        algorithm: md5
+    b:
+      hash:
+        input: col1
+    c: hash_to_int(col1)
+    d: hash(col1)
+    """
+    schema = {"col1": "str"}
+    result = from_yaml(text, input_schema=schema)
+
+    for key in "abcd":
+        expr = result[key]
+        assert isinstance(expr, Expression)
+        assert expr.type == "HASH_TO_INT"
+
+    alg = result["a"].arguments["algorithm"]
+    assert isinstance(alg, Literal) and alg.value == "md5"

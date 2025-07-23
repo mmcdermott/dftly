@@ -59,6 +59,7 @@ _EXPR_TYPES = {
     "STRING_INTERPOLATE",
     "PARSE_WITH_FORMAT_STRING",
     "HASH_TO_INT",
+    "HASH",
     "REGEX",
 }
 
@@ -148,6 +149,8 @@ class Parser:
                     parsed_args = {"pattern": pattern_node, "inputs": parsed_inputs}
                 else:
                     parsed_args = self._parse_arguments(args)
+                if expr_upper == "HASH":
+                    expr_upper = "HASH_TO_INT"
                 return Expression(expr_upper, parsed_args)
             if isinstance(args, Mapping) and any(
                 k in args
@@ -426,6 +429,8 @@ class DftlyTransformer(Transformer):
 
     def func(self, items: list[Any]) -> Expression:  # type: ignore[override]
         name = items[0]
+        if isinstance(name, str) and name.lower() == "hash":
+            name = "hash_to_int"
         args = items[1] if len(items) > 1 else []
         parsed_args = [self.parser._as_node(a) for a in args]
         return Expression(name.upper(), parsed_args)
