@@ -11,6 +11,8 @@ AND.2: "and"i
 OR.2: "or"i
 NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
+IN: /in/i
+NUMBER: /\d+(?:\.\d+)?/
 
 start: expr
 expr: conditional
@@ -18,7 +20,10 @@ conditional: bool_expr IF bool_expr ELSE conditional   -> ifexpr
           | bool_expr
 
 ?bool_expr: and_expr (OR and_expr)*   -> or_expr
-?and_expr: unary (AND unary)*         -> and_expr
+?and_expr: in_expr (AND in_expr)*     -> and_expr
+?in_expr: unary IN set_literal        -> value_in_set
+        | unary IN range_literal      -> value_in_range
+        | unary
 ?unary: NOT unary                    -> not_expr
       | additive
 
@@ -29,7 +34,15 @@ op: PLUS cast_expr     -> plus
         | cast_expr
 cast_expr: call_expr
          | NAME AS NAME   -> cast
+         | NUMBER         -> number
          | NAME           -> name
 
 call_expr: NAME "(" [args] ")"   -> func
 args: expr ("," expr)*   -> arg_list
+
+set_literal: "{" [args] "}"   -> literal_set
+
+range_literal: "[" expr "," expr "]"   -> range_inc
+             | "[" expr "," expr ")"   -> range_ie
+             | "(" expr "," expr "]"   -> range_ei
+             | "(" expr "," expr ")"   -> range_exc
