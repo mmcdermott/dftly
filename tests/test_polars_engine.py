@@ -126,3 +126,22 @@ def test_polars_boolean_and_coalesce_and_membership():
     assert out.get_column("c").to_list() == [1, 3]
     assert out.get_column("d").to_list() == [True, False]
     assert out.get_column("e").to_list() == [True, False]
+
+
+def test_polars_string_interpolate():
+    text = """
+    a:
+      string_interpolate:
+        pattern: "hello {col1}!"
+        inputs:
+          col1: col1
+    b: "hey {col1}!"
+    """
+    result = from_yaml(text, input_schema={"col1": "int"})
+    df = pl.DataFrame({"col1": [1, 2]})
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+    )
+    assert out.get_column("a").to_list() == ["hello 1!", "hello 2!"]
+    assert out.get_column("b").to_list() == ["hey 1!", "hey 2!"]
