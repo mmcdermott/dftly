@@ -14,6 +14,16 @@ def test_polars_addition():
     assert out.to_list() == [4, 6]
 
 
+def test_polars_function_call():
+    text = "a: add(col1, col2)"
+    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    expr = to_polars(result["a"])
+
+    df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
+    out = df.with_columns(a=expr).get_column("a")
+    assert out.to_list() == [4, 6]
+
+
 def test_polars_datetime_plus_duration():
     text = "a: dt + dur"
     result = from_yaml(text, input_schema={"dt": "datetime", "dur": "duration"})

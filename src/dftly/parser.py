@@ -278,6 +278,19 @@ class DftlyTransformer(Transformer):
             },
         )
 
+    def cast_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
+        (item,) = items
+        return item
+
+    def arg_list(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
+        return items
+
+    def func(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        name = items[0]
+        args = items[1] if len(items) > 1 else []
+        parsed_args = [self.parser._as_node(a) for a in args]
+        return Expression(name.upper(), parsed_args)
+
     def plus(self, items: list[Any]) -> Tuple[str, Any]:  # type: ignore[override]
         _, val = items
         return "+", val
