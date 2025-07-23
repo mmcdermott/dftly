@@ -245,3 +245,114 @@ def test_parse_regex_dict_and_string_forms():
     d_expr = result["d"]
     assert isinstance(d_expr, Expression) and d_expr.type == "REGEX"
     assert d_expr.arguments["action"].value == "NOT_MATCH"
+
+
+def test_parse_parse_with_format_string_forms():
+    text = """
+    a:
+      parse_with_format_string:
+        input: dt
+        output_type: datetime
+        format: '%Y-%m-%d %H:%M:%S'
+    b:
+      parse:
+        input: dt
+        output_type: datetime
+        format: '%Y-%m-%d %H:%M:%S'
+    c:
+      parse_with_format_string:
+        input: dt
+        datetime_format: '%Y-%m-%d %H:%M:%S'
+    d:
+      dt:
+        datetime_format: '%Y-%m-%d %H:%M:%S'
+    e: "dt as '%Y-%m-%d'"
+    """
+    schema = {"dt": "str"}
+    result = from_yaml(text, input_schema=schema)
+
+    for key in ["a", "b", "c", "d", "e"]:
+        expr = result[key]
+        assert isinstance(expr, Expression)
+        assert expr.type == "PARSE_WITH_FORMAT_STRING"
+        args = expr.arguments
+        assert isinstance(args["input"], Column) and args["input"].name == "dt"
+        fmt = args.get("format")
+        if isinstance(fmt, Literal):
+            fmt = fmt.value
+        assert fmt.startswith("%Y-%m-%d")
+
+
+def test_parse_numeric_and_duration_formats():
+    text = """
+    a:
+      parse_with_format_string:
+        input: num
+        numeric_format: '%d'
+    b:
+      num:
+        numeric_format: '%d'
+    c:
+      parse_with_format_string:
+        input: dur
+        duration_format: '%H:%M:%S'
+    d:
+      dur:
+        duration_format: '%H:%M:%S'
+    e: "dur as '%H:%M:%S'"
+    """
+    schema = {"num": "str", "dur": "str"}
+    result = from_yaml(text, input_schema=schema)
+
+    for key in ["a", "b", "c", "d", "e"]:
+        expr = result[key]
+        assert isinstance(expr, Expression)
+        assert expr.type == "PARSE_WITH_FORMAT_STRING"
+        args = expr.arguments
+        assert isinstance(args["input"], Column)
+        if key in {"c", "d", "e"}:
+            assert args["output_type"].value == "duration"
+        if key in {"a", "b"}:
+            assert args["output_type"].value == "float"
+
+
+def test_parse_extended_numeric_and_duration_formats():
+    text = """
+    a:
+      parse_with_format_string:
+        input: hours
+        duration_format: '%H hours'
+    b:
+      parse_with_format_string:
+        input: comma_num
+        numeric_format: '%,d'
+    c:
+      parse_with_format_string:
+        input: underscore_num
+        numeric_format: '%d'
+    d:
+      parse_with_format_string:
+        input: rel
+        duration_format: '%m mo %dd'
+    e: "hours as '%H hours'"
+    f: "comma_num as '%,d'"
+    g: "underscore_num as '%d'"
+    """
+    schema = {
+        "hours": "str",
+        "comma_num": "str",
+        "underscore_num": "str",
+        "rel": "str",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    for key in "abcdefg":
+        expr = result[key]
+        assert isinstance(expr, Expression)
+        assert expr.type == "PARSE_WITH_FORMAT_STRING"
+        if key in {"a", "d", "e"}:
+            assert expr.arguments["output_type"].value == "duration"
+        if key in {"b", "c"}:
+            assert expr.arguments["output_type"].value == "float"
+        if key in {"f", "g"}:
+            assert expr.arguments["output_type"].value == "int"

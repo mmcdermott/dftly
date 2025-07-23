@@ -106,6 +106,24 @@ class Parser:
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))
             expr_upper = expr_type.upper()
+            if expr_type in {"parse_with_format_string", "parse"}:
+                parsed_args = self._parse_arguments(args)
+                if isinstance(parsed_args, Mapping):
+                    if "datetime_format" in parsed_args:
+                        parsed_args.setdefault(
+                            "format", parsed_args.pop("datetime_format")
+                        )
+                    if "duration_format" in parsed_args:
+                        parsed_args.setdefault(
+                            "format", parsed_args.pop("duration_format")
+                        )
+                        parsed_args.setdefault("output_type", Literal("duration"))
+                    if "numeric_format" in parsed_args:
+                        parsed_args.setdefault(
+                            "format", parsed_args.pop("numeric_format")
+                        )
+                        parsed_args.setdefault("output_type", Literal("float"))
+                return Expression("PARSE_WITH_FORMAT_STRING", parsed_args)
             if expr_type in {
                 "regex_extract",
                 "regex_match",
@@ -131,6 +149,30 @@ class Parser:
                 else:
                     parsed_args = self._parse_arguments(args)
                 return Expression(expr_upper, parsed_args)
+            if isinstance(args, Mapping) and any(
+                k in args
+                for k in {
+                    "format",
+                    "datetime_format",
+                    "duration_format",
+                    "numeric_format",
+                    "output_type",
+                }
+            ):
+                parsed_args = self._parse_arguments(args)
+                parsed_args.setdefault(
+                    "input",
+                    Column(expr_type, self.input_schema.get(expr_type)),
+                )
+                if "datetime_format" in parsed_args:
+                    parsed_args.setdefault("format", parsed_args.pop("datetime_format"))
+                if "duration_format" in parsed_args:
+                    parsed_args.setdefault("format", parsed_args.pop("duration_format"))
+                    parsed_args.setdefault("output_type", Literal("duration"))
+                if "numeric_format" in parsed_args:
+                    parsed_args.setdefault("format", parsed_args.pop("numeric_format"))
+                    parsed_args.setdefault("output_type", Literal("float"))
+                return Expression("PARSE_WITH_FORMAT_STRING", parsed_args)
 
         # generic mapping value
         return {k: self._parse_value(v) for k, v in value.items()}
@@ -160,12 +202,39 @@ class Parser:
         if regex_expr is not None:
             return regex_expr
 
+        parse_fmt = re.match(r"(?i)^(.+)\s+as\s+(['\"])(.+)\2$", value.strip())
+        if parse_fmt:
+            input_text = parse_fmt.group(1).strip()
+            fmt = parse_fmt.group(3)
+            inp = self._parse_string(input_text)
+            out_type = self._infer_output_type(fmt)
+            args = {
+                "input": self._as_node(inp),
+                "format": Literal(fmt),
+                "output_type": Literal(out_type),
+            }
+            return Expression("PARSE_WITH_FORMAT_STRING", args)
+
         try:
             tree = self._lark.parse(value)
             result = self._transformer.transform(tree)
             return result
         except Exception:
             return self._as_node(value)
+
+    # ------------------------------------------------------------------
+    def _infer_output_type(self, fmt: str) -> str:
+        time_tokens = ["%H", "%I", "%M", "%S", "%p", "%X", "%T"]
+        date_tokens = ["%Y", "%y", "%m", "%d", "%b", "%B", "%j", "%U", "%W", "%F"]
+        num_tokens = {"%d", "%f", "%i", "%u", "%e", "%g"}
+        tokens = [f"%{t}" for t in re.findall(r"%[^A-Za-z]*([A-Za-z])", fmt)]
+        has_time = any(t in tokens for t in time_tokens)
+        has_date = any(t in tokens for t in date_tokens)
+        if tokens and all(t in num_tokens for t in tokens):
+            return "float" if any(t in {"%f", "%e", "%g"} for t in tokens) else "int"
+        if has_time and not has_date:
+            return "duration"
+        return "datetime" if has_time else "date"
 
     # ------------------------------------------------------------------
     def _as_node(self, value: Any) -> Any:

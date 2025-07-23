@@ -173,3 +173,98 @@ def test_polars_regex_operations():
     assert out.get_column("a").to_list() == ["123", "456"]
     assert out.get_column("b").to_list() == [True, False]
     assert out.get_column("c").to_list() == [False, True]
+
+
+def test_polars_parse_with_format_string_forms():
+    text = """
+    a:
+      parse_with_format_string:
+        input: dt
+        output_type: datetime
+        format: '%Y-%m-%d %H:%M:%S'
+    b: "dt as '%Y-%m-%d %H:%M:%S'"
+    """
+    result = from_yaml(text, input_schema={"dt": "str"})
+    df = pl.DataFrame({"dt": ["2024-01-01 12:00:00", "2024-02-01 13:30:00"]})
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+    )
+    assert out.get_column("a").dtype == pl.Datetime
+    assert out.get_column("a").to_list() == out.get_column("b").to_list()
+
+
+def test_polars_parse_numeric_and_duration_forms():
+    text = """
+    a:
+      parse_with_format_string:
+        input: num
+        numeric_format: '%d'
+    b: "num as '%d'"
+    c:
+      parse_with_format_string:
+        input: dur
+        duration_format: '%H:%M:%S'
+    d: "dur as '%H:%M:%S'"
+    """
+    result = from_yaml(text, input_schema={"num": "str", "dur": "str"})
+    df = pl.DataFrame({"num": ["1", "2"], "dur": ["01:00:00", "02:30:00"]})
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+        d=to_polars(result["d"]),
+    )
+    assert out.get_column("a").dtype == pl.Float64
+    assert out.get_column("a").to_list() == [1.0, 2.0]
+    assert out.get_column("b").to_list() == [1, 2]
+    assert out.get_column("c").dtype == pl.Duration
+    assert out.get_column("c").to_list() == out.get_column("d").to_list()
+
+
+def test_polars_parse_extended_numeric_and_duration_forms():
+    text = """
+    a:
+      parse_with_format_string:
+        input: hours
+        duration_format: '%H hours'
+    b:
+      parse_with_format_string:
+        input: comma_num
+        numeric_format: '%,d'
+    c:
+      parse_with_format_string:
+        input: underscore_num
+        numeric_format: '%d'
+    d:
+      parse_with_format_string:
+        input: rel
+        duration_format: '%m mo %dd'
+    e: "hours as '%H hours'"
+    f: "comma_num as '%,d'"
+    g: "underscore_num as '%d'"
+    """
+    schema = {
+        "hours": "str",
+        "comma_num": "str",
+        "underscore_num": "str",
+        "rel": "str",
+    }
+    result = from_yaml(text, input_schema=schema)
+    df = pl.DataFrame(
+        {
+            "hours": ["3 hours"],
+            "comma_num": ["4,004,240"],
+            "underscore_num": ["1_000"],
+            "rel": ["2 mo 5d"],
+        }
+    )
+    out = df.with_columns(**{k: to_polars(result[k]) for k in "abcdefg"})
+
+    assert out.get_column("a").dtype == pl.Duration
+    assert out.get_column("a")[0].total_seconds() == 3 * 3600
+    assert out.get_column("b")[0] == 4004240
+    assert out.get_column("c")[0] == 1000
+    assert out.get_column("d")[0].total_seconds() == 35 * 24 * 3600
+    for key in "ae":
+        assert out.get_column(key).to_list() == out.get_column("a").to_list()

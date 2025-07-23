@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping
 import string
+from datetime import datetime
 
 try:
     import polars as pl
@@ -26,6 +27,7 @@ _TYPE_MAP: dict[str, Any] = {
     "string": str,
     "date": pl.Date,
     "datetime": pl.Datetime,
+    "duration": pl.Duration,
 }
 
 
@@ -146,6 +148,41 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
         if action == "NOT_MATCH":
             return ~inp.str.contains(pattern)
         raise ValueError("Invalid REGEX action")
+    if typ == "PARSE_WITH_FORMAT_STRING":
+        inp = to_polars(args["input"])
+        fmt = args.get("format")
+        if isinstance(fmt, Literal):
+            fmt = fmt.value
+        out_type = args.get("output_type")
+        if isinstance(out_type, Literal):
+            out_type = out_type.value
+        dtype = _TYPE_MAP.get(str(out_type).lower(), out_type)
+
+        if dtype == pl.Duration:
+            base = datetime(1900, 1, 1)
+
+            if fmt:
+
+                def parse_func(val: str | None) -> object:
+                    if val is None:
+                        return None
+                    try:
+                        dt = datetime.strptime(val, fmt)
+                    except Exception:
+                        return None
+                    return dt - base
+
+                return inp.map_elements(parse_func, return_dtype=pl.Duration)
+
+            return inp.str.strptime(pl.Time).cast(pl.Duration)
+
+        if dtype in {int, float}:
+            cleaned = inp.str.replace_all(r"[^0-9.+-]", "")
+            if dtype is int:
+                return cleaned.str.to_integer()
+            return cleaned.str.to_decimal().cast(float)
+
+        return inp.str.strptime(dtype, fmt)
 
     raise ValueError(f"Unsupported expression type: {expr.type}")
 
