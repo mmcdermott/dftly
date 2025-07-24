@@ -7,6 +7,9 @@ AT: "@"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
+AND_SYM: "&&"
+OR_SYM: "||"
+NOT_SYM: "!"
 AND.2: "and"i
 OR.2: "or"i
 NOT.2: "not"i
@@ -19,12 +22,12 @@ expr: conditional
 conditional: bool_expr IF bool_expr ELSE conditional   -> ifexpr
           | bool_expr
 
-?bool_expr: and_expr (OR and_expr)*   -> or_expr
-?and_expr: in_expr (AND in_expr)*     -> and_expr
+?bool_expr: and_expr ((OR|OR_SYM) and_expr)*   -> or_expr
+?and_expr: in_expr ((AND|AND_SYM) in_expr)*     -> and_expr
 ?in_expr: unary IN set_literal        -> value_in_set
         | unary IN range_literal      -> value_in_range
         | unary
-?unary: NOT unary                    -> not_expr
+?unary: (NOT|NOT_SYM) unary                    -> not_expr
       | additive
 
 additive: at_expr op*
