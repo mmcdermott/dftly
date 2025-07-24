@@ -141,6 +141,28 @@ def test_parse_boolean_and_coalesce():
     assert coalesce_expr.type == "COALESCE"
 
 
+def test_parse_boolean_symbol_forms():
+    text = """
+    a: flag1 && flag2
+    b: flag1 || flag2
+    c: "!flag1"
+    """
+    schema = {"flag1": "bool", "flag2": "bool"}
+    result = from_yaml(text, input_schema=schema)
+
+    and_expr = result["a"]
+    assert isinstance(and_expr, Expression)
+    assert and_expr.type == "AND"
+
+    or_expr = result["b"]
+    assert isinstance(or_expr, Expression)
+    assert or_expr.type == "OR"
+
+    not_expr = result["c"]
+    assert isinstance(not_expr, Expression)
+    assert not_expr.type == "NOT"
+
+
 def test_parse_value_in_set_and_range():
     text = """
     a:

@@ -138,6 +138,25 @@ def test_polars_boolean_and_coalesce_and_membership():
     assert out.get_column("e").to_list() == [True, False]
 
 
+def test_polars_boolean_symbol_forms():
+    text = """
+    a: flag1 && flag2
+    b: flag1 || flag2
+    c: "!flag1"
+    """
+    schema = {"flag1": "bool", "flag2": "bool"}
+    result = from_yaml(text, input_schema=schema)
+    df = pl.DataFrame({"flag1": [True, False], "flag2": [True, True]})
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+    )
+    assert out.get_column("a").to_list() == [True, False]
+    assert out.get_column("b").to_list() == [True, True]
+    assert out.get_column("c").to_list() == [False, True]
+
+
 def test_polars_in_operator_string_forms():
     text = """
     a: col1 in {1, 3}
