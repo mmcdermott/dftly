@@ -424,3 +424,15 @@ def test_parse_hash_to_int_and_hash_forms():
 
     alg = result["a"].arguments["algorithm"]
     assert isinstance(alg, Literal) and alg.value == "md5"
+
+
+def test_from_yaml_non_mapping_raises_type_error():
+    with pytest.raises(TypeError):
+        from_yaml("- 1\n- 2")
+
+
+def test_parse_non_mapping_raises_type_error():
+    from dftly import parse
+
+    with pytest.raises(TypeError):
+        parse([1, 2])
