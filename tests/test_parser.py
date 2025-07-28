@@ -436,3 +436,9 @@ def test_parse_non_mapping_raises_type_error():
 
     with pytest.raises(TypeError):
         parse([1, 2])
+
+
+def test_invalid_chained_expression_raises_error():
+    text = "a: col1 + col2 AS %m mo %d d"
+    with pytest.raises(ValueError):
+        from_yaml(text, input_schema={"col1": "str", "col2": "str"})

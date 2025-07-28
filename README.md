@@ -665,7 +665,10 @@ time:
 ```
 
 _String form_: You can also use the `as` keyword (case insensitive) to specify the format string for parsing,
-with the structure of the format string dictating the output type.
+with the structure of the format string dictating the output type. The format string **must** be quoted.
+Unquoted strings that look like chained expressions (for example `col1 + col2 AS %m mo %d d`) are considered
+invalid and will raise a `ValueError`. To combine parsing with other operations, use quotes around the
+format string, e.g., `col1 + col2 as '%m mo %d d'`.
 
 ##### `HASH_TO_INT`
 

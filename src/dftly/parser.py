@@ -8,6 +8,7 @@ import string
 
 from importlib.resources import files
 from lark import Lark, Transformer, Token
+from lark.exceptions import LarkError, VisitError
 from .nodes import Column, Expression, Literal
 
 # ---------------------------------------------------------------------------
@@ -214,16 +215,24 @@ class Parser:
             }
             return Expression("PARSE_WITH_FORMAT_STRING", args)
 
+        parse_failed = False
         try:
             tree = self._lark.parse(value)
             result = self._transformer.transform(tree)
             return result
-        except Exception:
-            pass
+        except (LarkError, VisitError):
+            parse_failed = True
 
         interp = self._parse_string_interpolate(value)
         if interp is not None:
             return interp
+
+        if parse_failed and re.search(
+            r"(?:\s[+\-@]\s)|(?:&&|\|\||!)|\b(?:as|if|else|and|or|in|not)\b",
+            value,
+            re.IGNORECASE,
+        ):
+            raise ValueError(f"invalid expression syntax: {value!r}")
 
         return self._as_node(value)
 
