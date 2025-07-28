@@ -398,6 +398,9 @@ class DftlyTransformer(Transformer):
     def NUMBER(self, token: Any) -> str:  # type: ignore[override]
         return str(token)
 
+    def STRING(self, token: Any) -> str:  # type: ignore[override]
+        return str(token)
+
     def number(self, items: list[str]) -> Literal:  # type: ignore[override]
         (text,) = items
         if "." in text:
@@ -409,6 +412,16 @@ class DftlyTransformer(Transformer):
     def name(self, items: list[str]) -> str:  # type: ignore[override]
         (val,) = items
         return val
+
+    def string(self, items: list[str]) -> Literal:  # type: ignore[override]
+        import ast
+
+        (text,) = items
+        return Literal(ast.literal_eval(text))
+
+    def paren_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
+        (item,) = items
+        return item
 
     def expr(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items

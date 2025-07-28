@@ -1,4 +1,5 @@
 %import common.WS
+%import common.ESCAPED_STRING -> STRING
 %ignore WS
 
 PLUS: "+"
@@ -16,6 +17,8 @@ NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
 IN: /in/i
 NUMBER: /\d+(?:\.\d+)?/
+LPAR: "("
+RPAR: ")"
 
 start: expr
 expr: conditional
@@ -38,7 +41,9 @@ op: PLUS cast_expr     -> plus
 cast_expr: call_expr
          | NAME AS NAME   -> cast
          | NUMBER         -> number
+         | STRING         -> string
          | NAME           -> name
+         | "(" expr ")" -> paren_expr
 
 call_expr: NAME "(" [args] ")"   -> func
 args: expr ("," expr)*   -> arg_list
