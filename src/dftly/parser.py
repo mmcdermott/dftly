@@ -415,6 +415,7 @@ class DftlyTransformer(Transformer):
 
     def string(self, items: list[str]) -> Literal:  # type: ignore[override]
         import ast
+
         (text,) = items
         return Literal(ast.literal_eval(text))
 
