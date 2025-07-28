@@ -36,6 +36,17 @@ def test_parse_literal_string():
     assert lit.value == "hello"
 
 
+def test_parse_parentheses_and_string_literal():
+    text = 'a: (add(col1, "foo"))'
+    result = from_yaml(text, input_schema={"col1": "str"})
+    expr = result["a"]
+    assert isinstance(expr, Expression)
+    assert expr.type == "ADD"
+    args = expr.arguments
+    assert isinstance(args[0], Column)
+    assert isinstance(args[1], Literal) and args[1].value == "foo"
+
+
 def test_parse_string_interpolate_dict_and_string_forms():
     text = """
     a:
