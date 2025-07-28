@@ -202,19 +202,6 @@ class Parser:
         if regex_expr is not None:
             return regex_expr
 
-        parse_fmt = re.match(r"(?i)^(.+)\s+as\s+(['\"])(.+)\2$", value.strip())
-        if parse_fmt:
-            input_text = parse_fmt.group(1).strip()
-            fmt = parse_fmt.group(3)
-            inp = self._parse_string(input_text)
-            out_type = self._infer_output_type(fmt)
-            args = {
-                "input": self._as_node(inp),
-                "format": Literal(fmt),
-                "output_type": Literal(out_type),
-            }
-            return Expression("PARSE_WITH_FORMAT_STRING", args)
-
         parse_failed = False
         try:
             tree = self._lark.parse(value)
@@ -521,6 +508,25 @@ class DftlyTransformer(Transformer):
     def minus(self, items: list[Any]) -> Tuple[str, Any]:  # type: ignore[override]
         _, val = items
         return "-", val
+
+    def parse_as_format(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        expr, _, fmt = items
+        fmt_text = fmt
+        if isinstance(fmt_text, str):
+            import ast
+
+            fmt_text = ast.literal_eval(fmt_text)
+        out_type = self.parser._infer_output_type(fmt_text)
+        args = {
+            "input": self.parser._as_node(expr),
+            "format": Literal(fmt_text),
+            "output_type": Literal(out_type),
+        }
+        return Expression("PARSE_WITH_FORMAT_STRING", args)
+
+    def parse_format(self, items: list[Any]) -> Any:  # type: ignore[override]
+        (item,) = items
+        return item
 
     def additive(self, items: list[Any]) -> Any:  # type: ignore[override]
         base = self.parser._as_node(items[0])

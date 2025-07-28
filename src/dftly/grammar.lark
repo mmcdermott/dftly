@@ -1,6 +1,6 @@
 %import common.WS
-%import common.ESCAPED_STRING -> STRING
 %ignore WS
+STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
 
 PLUS: "+"
 MINUS: "-"
@@ -21,8 +21,10 @@ LPAR: "("
 RPAR: ")"
 
 start: expr
-expr: conditional
-conditional: bool_expr IF bool_expr ELSE conditional   -> ifexpr
+expr: parse_format
+parse_format: conditional AS STRING -> parse_as_format
+            | conditional
+conditional: bool_expr IF bool_expr ELSE parse_format   -> ifexpr
           | bool_expr
 
 ?bool_expr: and_expr ((OR|OR_SYM) and_expr)*   -> or_expr
@@ -39,6 +41,7 @@ op: PLUS cast_expr     -> plus
 ?at_expr: cast_expr AT cast_expr   -> resolve_ts
         | cast_expr
 cast_expr: call_expr
+         | NAME AS STRING  -> parse_as_format
          | NAME AS NAME   -> cast
          | NUMBER         -> number
          | STRING         -> string
