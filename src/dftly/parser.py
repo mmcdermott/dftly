@@ -202,7 +202,6 @@ class Parser:
         if regex_expr is not None:
             return regex_expr
 
-
         parse_failed = False
         try:
             tree = self._lark.parse(value)
