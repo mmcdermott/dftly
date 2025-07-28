@@ -198,10 +198,6 @@ class Parser:
             if resolved is not None:
                 return resolved
 
-        regex_expr = self._parse_regex_string(value)
-        if regex_expr is not None:
-            return regex_expr
-
         parse_failed = False
         try:
             tree = self._lark.parse(value)
@@ -400,6 +396,10 @@ class DftlyTransformer(Transformer):
         (val,) = items
         return val
 
+    def regex(self, items: list[Any]) -> str:  # type: ignore[override]
+        (val,) = items
+        return str(val)
+
     def string(self, items: list[str]) -> Literal:  # type: ignore[override]
         import ast
 
@@ -485,6 +485,40 @@ class DftlyTransformer(Transformer):
             "min_inclusive": Literal(False),
             "max_inclusive": Literal(False),
         }
+
+    def regex_extract(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        tokens = [i for i in items if not isinstance(i, Token)]
+        if len(tokens) == 3:
+            group_token, regex_text, expr = tokens
+            group = int(group_token)
+        else:
+            regex_text, expr = tokens
+            group = None
+        args: Dict[str, Any] = {
+            "regex": Literal(str(regex_text)),
+            "action": Literal("EXTRACT"),
+            "input": self.parser._as_node(expr),
+        }
+        if group is not None:
+            args["group"] = Literal(group)
+        return Expression("REGEX", args)
+
+    def regex_match(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        tokens = [i for i in items if not isinstance(i, Token)]
+        regex_text, expr = tokens
+        action = (
+            "NOT_MATCH"
+            if any(isinstance(t, Token) and t.type == "NOT_MATCH" for t in items)
+            else "MATCH"
+        )
+        return Expression(
+            "REGEX",
+            {
+                "regex": Literal(str(regex_text)),
+                "action": Literal(action),
+                "input": self.parser._as_node(expr),
+            },
+        )
 
     def value_in_set(self, items: list[Any]) -> Expression:  # type: ignore[override]
         value = items[0]

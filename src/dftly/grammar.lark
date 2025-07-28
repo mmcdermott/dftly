@@ -11,14 +11,23 @@ ELSE: /else/i
 AND_SYM: "&&"
 OR_SYM: "||"
 NOT_SYM: "!"
+NOT_MATCH.2: /not\s+match/i
 AND.2: "and"i
 OR.2: "or"i
 NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
 IN: /in/i
 NUMBER: /\d+(?:\.\d+)?/
+REGEX_PAREN_TOKEN.2: /\([^\s]+\)/
+REGEX_TOKEN: /[^\s()]+/
 LPAR: "("
 RPAR: ")"
+EXTRACT.2: /extract/i
+GROUP.2: /group/i
+OF.2: /of/i
+FROM.2: /from/i
+MATCH.2: /match/i
+AGAINST.2: /against/i
 
 start: expr
 expr: parse_format
@@ -41,6 +50,8 @@ op: PLUS cast_expr     -> plus
 ?at_expr: cast_expr AT cast_expr   -> resolve_ts
         | cast_expr
 cast_expr: call_expr
+         | regex_extract
+         | regex_match
          | NAME AS STRING  -> parse_as_format
          | NAME AS NAME   -> cast
          | NUMBER         -> number
@@ -57,3 +68,10 @@ range_literal: "[" expr "," expr "]"   -> range_inc
              | "[" expr "," expr ")"   -> range_ie
              | "(" expr "," expr "]"   -> range_ei
              | "(" expr "," expr ")"   -> range_exc
+
+regex_extract: EXTRACT (GROUP NUMBER OF)? regex FROM expr
+regex_match: MATCH regex AGAINST expr -> regex_match
+           | NOT_MATCH regex AGAINST expr -> regex_match
+regex: REGEX_PAREN_TOKEN
+     | REGEX_TOKEN
+     | STRING
