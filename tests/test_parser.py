@@ -95,8 +95,8 @@ def test_parse_subtract_and_cast_and_conditional():
 
 def test_parse_resolve_timestamp_string_form():
     text = """
-    a: charttime @ 11:59:59 p.m.
-    b: birth_year @ January 1, 12:00 a.m.
+    a: charttime @ "11:59:59 p.m."
+    b: birth_year @ "January 1, 12:00 a.m."
     """
     schema = {"charttime": "date", "birth_year": "int"}
     result = from_yaml(text, input_schema=schema)

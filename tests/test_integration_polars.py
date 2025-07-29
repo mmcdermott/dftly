@@ -38,7 +38,7 @@ d:
     value: col1
     min: 0
     max: 10
-e: chartdate @ 11:59:59 p.m.
+e: chartdate @ "11:59:59 p.m."
 """
 
 SCHEMA = {
