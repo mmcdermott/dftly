@@ -78,7 +78,7 @@ def test_polars_conditional():
 
 def test_polars_resolve_timestamp():
     text = """
-    a: charttime @ 11:59:59 p.m.
+    a: charttime @ "11:59:59 p.m."
     """
     schema = {"charttime": "date"}
     result = from_yaml(text, input_schema=schema)
