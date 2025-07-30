@@ -372,3 +372,40 @@ def test_polars_hash_to_int_forms():
     assert out.get_column("a").to_list() == expected_a
     assert out.get_column("c").to_list() == expected_a
     assert out.get_column("b").to_list() == expected_b
+
+
+def test_polars_operator_precedence_arithmetic():
+    text = """
+    a: col1 + col2 + col3
+    b: col1 + col2 - col3
+    """
+    result = from_yaml(text, input_schema={"col1": "int", "col2": "int", "col3": "int"})
+    df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4], "col3": [5, 6]})
+    out = df.with_columns(a=to_polars(result["a"]), b=to_polars(result["b"]))
+    assert out.get_column("a").to_list() == [9, 12]
+    assert out.get_column("b").to_list() == [-1, 0]
+
+
+def test_polars_operator_precedence_boolean():
+    text = """
+    a: flag1 and flag2 or flag3
+    b: flag1 or flag2 and flag3
+    c: not flag1 and flag2
+    """
+    schema = {"flag1": "bool", "flag2": "bool", "flag3": "bool"}
+    result = from_yaml(text, input_schema=schema)
+    df = pl.DataFrame(
+        {
+            "flag1": [True, False, False],
+            "flag2": [True, False, True],
+            "flag3": [False, True, True],
+        }
+    )
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+    )
+    assert out.get_column("a").to_list() == [True, True, True]
+    assert out.get_column("b").to_list() == [True, False, True]
+    assert out.get_column("c").to_list() == [False, False, True]

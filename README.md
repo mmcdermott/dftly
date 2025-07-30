@@ -498,6 +498,11 @@ a: add(col1, col2)   # Add two columns together
 b: conditional(if=value_in_literal_set(col1, [1, 2, foo]), then=col2, else=43)   # Conditional expression
 ```
 
+Parentheses can be used to group sub-expressions. Without explicit grouping the
+grammar follows normal operator precedence: arithmetic and membership operations
+are evaluated before boolean logic, and `not` binds tighter than `and`, which in
+turn binds tighter than `or`.
+
 to be parsed into:
 
 ```yaml
@@ -633,6 +638,8 @@ range between 1 and 10, or `col2 in (1, 10]` for an exclusive lower bound and in
 ##### `NOT`/`AND`/`OR`
 
 _String from_: Uses `not`, `and`, and `or` keywords (case insensitive) or the `!`, `&&`, and `||` syntax.
+Parentheses may be used to group boolean expressions; otherwise `not` applies
+before `and`, which applies before `or`.
 
 ##### `PARSE_WITH_FORMAT_STRING`
 

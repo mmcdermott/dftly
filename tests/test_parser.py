@@ -487,3 +487,51 @@ def test_invalid_chained_expression_raises_error():
     text = "a: col1 + col2 AS %m mo %d d"
     with pytest.raises(ValueError):
         from_yaml(text, input_schema={"col1": "str", "col2": "str"})
+
+
+def test_parse_operator_precedence():
+    text = """
+    a: col1 + col2 + col3
+    b: col1 + col2 - col3
+    c: flag1 and flag2 or flag3
+    d: flag1 or flag2 and flag3
+    e: not flag1 and flag2
+    """
+    schema = {
+        "col1": "int",
+        "col2": "int",
+        "col3": "int",
+        "flag1": "bool",
+        "flag2": "bool",
+        "flag3": "bool",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    a_expr = result["a"]
+    assert isinstance(a_expr, Expression) and a_expr.type == "ADD"
+    assert [arg.name for arg in a_expr.arguments] == ["col1", "col2", "col3"]
+
+    b_expr = result["b"]
+    assert isinstance(b_expr, Expression) and b_expr.type == "SUBTRACT"
+    left, right = b_expr.arguments
+    assert isinstance(left, Expression) and left.type == "ADD"
+    assert [arg.name for arg in left.arguments] == ["col1", "col2"]
+    assert isinstance(right, Column) and right.name == "col3"
+
+    c_expr = result["c"]
+    assert isinstance(c_expr, Expression) and c_expr.type == "OR"
+    left, right = c_expr.arguments
+    assert isinstance(left, Expression) and left.type == "AND"
+    assert isinstance(right, Column) and right.name == "flag3"
+
+    d_expr = result["d"]
+    assert isinstance(d_expr, Expression) and d_expr.type == "OR"
+    left, right = d_expr.arguments
+    assert isinstance(left, Column) and left.name == "flag1"
+    assert isinstance(right, Expression) and right.type == "AND"
+
+    e_expr = result["e"]
+    assert isinstance(e_expr, Expression) and e_expr.type == "AND"
+    left, right = e_expr.arguments
+    assert isinstance(left, Expression) and left.type == "NOT"
+    assert isinstance(right, Column) and right.name == "flag2"
