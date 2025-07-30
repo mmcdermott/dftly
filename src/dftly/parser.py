@@ -192,19 +192,17 @@ class Parser:
     # ------------------------------------------------------------------
 
     def _parse_string(self, value: str) -> Any:
-        parse_failed = False
         try:
             tree = self._lark.parse(value)
-            result = self._transformer.transform(tree)
-            return result
+            return self._transformer.transform(tree)
         except (LarkError, VisitError):
-            parse_failed = True
+            pass
 
         interp = self._parse_string_interpolate(value)
         if interp is not None:
             return interp
 
-        if parse_failed and re.search(
+        if re.search(
             r"(?:\s[+\-@]\s)|(?:&&|\|\||!)|\b(?:as|if|else|and|or|in|not)\b",
             value,
             re.IGNORECASE,
@@ -280,68 +278,6 @@ class Parser:
                 "second": Literal(dt.second),
             },
         }
-
-    def _parse_resolve_timestamp(self, left: Any, right: Any) -> Expression:
-        """Build a RESOLVE_TIMESTAMP expression from left and right values."""
-
-        left_node = self._as_node(left)
-
-        text: Optional[str] = None
-        if isinstance(right, Literal) and isinstance(right.value, str):
-            text = right.value
-        elif isinstance(right, str):
-            text = right
-
-        if text is not None:
-            right_parsed = self._parse_datetime_string(text) or self._parse_time_string(
-                text
-            )
-            if right_parsed is not None:
-                args: Dict[str, Any] = {}
-                if "date" in right_parsed and "year" not in right_parsed["date"]:
-                    right_parsed["date"]["year"] = left_node
-                    args.update(right_parsed)
-                elif "time" in right_parsed and "date" not in right_parsed:
-                    args["date"] = left_node
-                    args["time"] = right_parsed["time"]
-                else:
-                    args.update(right_parsed)
-                    args["date"] = left_node
-                return Expression("RESOLVE_TIMESTAMP", args)
-
-        return Expression(
-            "RESOLVE_TIMESTAMP",
-            {"date": left_node, "time": self._as_node(right)},
-        )
-
-    def _parse_regex_string(self, text: str) -> Optional[Expression]:
-        match = _REGEX_EXTRACT_RE.match(text)
-        if match:
-            regex = match.group("regex")
-            group = match.group("group")
-            input_text = match.group("input")
-            args: Dict[str, Any] = {
-                "regex": Literal(regex),
-                "action": Literal("EXTRACT"),
-                "input": self._parse_string(input_text),
-            }
-            if group is not None:
-                args["group"] = Literal(int(group))
-            return Expression("REGEX", args)
-
-        match = _REGEX_MATCH_RE.match(text)
-        if match:
-            regex = match.group("regex")
-            input_text = match.group("input")
-            neg = match.group("neg")
-            action = "NOT_MATCH" if neg else "MATCH"
-            args = {
-                "regex": Literal(regex),
-                "action": Literal(action),
-                "input": self._parse_string(input_text),
-            }
-            return Expression("REGEX", args)
-        return None
 
     def _parse_string_interpolate(self, text: str) -> Optional[Expression]:
         """Parse python string interpolation syntax."""
@@ -605,7 +541,37 @@ class DftlyTransformer(Transformer):
 
     def resolve_ts(self, items: list[Any]) -> Expression:  # type: ignore[override]
         left, _, right = items
-        return self.parser._parse_resolve_timestamp(left, right)
+        parser = self.parser
+
+        left_node = parser._as_node(left)
+
+        text: Optional[str] = None
+        if isinstance(right, Literal) and isinstance(right.value, str):
+            text = right.value
+        elif isinstance(right, str):
+            text = right
+
+        if text is not None:
+            right_parsed = parser._parse_datetime_string(
+                text
+            ) or parser._parse_time_string(text)
+            if right_parsed is not None:
+                args: Dict[str, Any] = {}
+                if "date" in right_parsed and "year" not in right_parsed["date"]:
+                    right_parsed["date"]["year"] = left_node
+                    args.update(right_parsed)
+                elif "time" in right_parsed and "date" not in right_parsed:
+                    args["date"] = left_node
+                    args["time"] = right_parsed["time"]
+                else:
+                    args.update(right_parsed)
+                    args["date"] = left_node
+                return Expression("RESOLVE_TIMESTAMP", args)
+
+        return Expression(
+            "RESOLVE_TIMESTAMP",
+            {"date": left_node, "time": parser._as_node(right)},
+        )
 
     def start(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items
