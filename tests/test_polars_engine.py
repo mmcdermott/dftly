@@ -157,6 +157,43 @@ def test_polars_boolean_symbol_forms():
     assert out.get_column("c").to_list() == [False, True]
 
 
+def test_polars_nested_parentheses_operations():
+    text = """
+    a: (col1 + col2) - (col3 + col4)
+    b: flag1 and (flag2 or flag3)
+    c: not (flag1 or flag2)
+    """
+    schema = {
+        "col1": "int",
+        "col2": "int",
+        "col3": "int",
+        "col4": "int",
+        "flag1": "bool",
+        "flag2": "bool",
+        "flag3": "bool",
+    }
+    result = from_yaml(text, input_schema=schema)
+    df = pl.DataFrame(
+        {
+            "col1": [1, 2],
+            "col2": [3, 4],
+            "col3": [5, 6],
+            "col4": [7, 8],
+            "flag1": [True, False],
+            "flag2": [False, True],
+            "flag3": [True, False],
+        }
+    )
+    out = df.with_columns(
+        a=to_polars(result["a"]),
+        b=to_polars(result["b"]),
+        c=to_polars(result["c"]),
+    )
+    assert out.get_column("a").to_list() == [-8, -8]
+    assert out.get_column("b").to_list() == [True, False]
+    assert out.get_column("c").to_list() == [False, False]
+
+
 def test_polars_in_operator_string_forms():
     text = """
     a: col1 in {1, 3}

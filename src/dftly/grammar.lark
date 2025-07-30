@@ -30,34 +30,45 @@ MATCH.2: /match/i
 AGAINST.2: /against/i
 
 start: expr
-expr: parse_format
-parse_format: conditional AS STRING -> parse_as_format
-            | conditional
-conditional: bool_expr IF bool_expr ELSE parse_format   -> ifexpr
-          | bool_expr
 
-?bool_expr: and_expr ((OR|OR_SYM) and_expr)*   -> or_expr
-?and_expr: in_expr ((AND|AND_SYM) in_expr)*     -> and_expr
-?in_expr: unary IN set_literal        -> value_in_set
-        | unary IN range_literal      -> value_in_range
-        | unary
-?unary: (NOT|NOT_SYM) unary                    -> not_expr
-      | additive
+?expr: conditional
 
-additive: at_expr op*
-op: PLUS cast_expr     -> plus
-  | MINUS cast_expr    -> minus
-?at_expr: cast_expr AT cast_expr   -> resolve_ts
-        | cast_expr
-cast_expr: call_expr
-         | regex_extract
-         | regex_match
-         | NAME AS STRING  -> parse_as_format
-         | NAME AS NAME   -> cast
-         | NUMBER         -> number
-         | STRING         -> string
-         | NAME           -> name
-         | "(" expr ")" -> paren_expr
+conditional: bool_expr IF bool_expr ELSE expr   -> ifexpr
+           | bool_expr
+
+?bool_expr: bool_expr (OR|OR_SYM) bool_term   -> or_expr
+          | bool_term
+
+?bool_term: bool_term (AND|AND_SYM) bool_factor   -> and_expr
+          | bool_factor
+
+?bool_factor: (NOT|NOT_SYM) bool_factor       -> not_expr
+            | in_expr
+
+?in_expr: additive IN set_literal        -> value_in_set
+        | additive IN range_literal      -> value_in_range
+        | additive
+
+?additive: additive PLUS multiplicative
+         | additive MINUS multiplicative
+         | multiplicative
+
+?multiplicative: multiplicative AT unary  -> resolve_ts
+               | unary
+
+?unary: primary
+
+primary: call_expr
+       | regex_extract
+       | regex_match
+       | NAME AS STRING  -> parse_as_format
+       | NAME AS NAME   -> cast
+       | NUMBER         -> number
+       | STRING         -> string
+       | NAME           -> name
+       | group
+
+group: "(" expr ")" -> paren_expr
 
 call_expr: NAME "(" [args] ")"   -> func
 args: expr ("," expr)*   -> arg_list
