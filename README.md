@@ -733,3 +733,32 @@ the resulting expression types.
 ['ADD', 'SUBTRACT', 'REGEX', 'COALESCE', 'CONDITIONAL', 'STRING_INTERPOLATE', 'TYPE_CAST', 'VALUE_IN_LITERAL_SET', 'VALUE_IN_RANGE', 'AND', 'PARSE_WITH_FORMAT_STRING', 'HASH_TO_INT', 'RESOLVE_TIMESTAMP']
 
 ```
+
+We can also execute these operations on a real `polars` dataframe:
+
+```python
+>>> import polars as pl
+>>> from datetime import date
+>>> from dftly.polars import map_to_polars
+>>> df = pl.DataFrame({
+...     "col1": [1, 2],
+...     "col2": [3, 4],
+...     "flag": [True, False],
+...     "flag1": [True, False],
+...     "flag2": [False, True],
+...     "chartdate": [date(2024, 1, 1), date(2024, 1, 2)],
+...     "text": ["foo123", "bar456"],
+...     "dt": ["2024-01-01", "2024-01-02"],
+... })
+>>> df = df.with_columns(**map_to_polars(ops))
+>>> with pl.Config(tbl_width_chars=200, tbl_cols=20, tbl_formatting="ASCII_MARKDOWN"):
+...     df.select(*ops)
+shape: (2, 13)
+| add | subtract | regex | coalesce | conditional | interpolate | cast | in_set | in_range | bool_ops | parse      | hashed              | timestamp           |
+| --- | ---      | ---   | ---      | ---         | ---         | ---  | ---    | ---      | ---      | ---        | ---                 | ---                 |
+| i64 | i64      | str   | i64      | i64         | str         | f64  | bool   | bool     | bool     | date       | u64                 | datetime[μs]        |
+|-----|----------|-------|----------|-------------|-------------|------|--------|----------|----------|------------|---------------------|---------------------|
+| 4   | -2       | 123   | 1        | 1           | val 1       | 1.0  | true   | true     | true     | 2024-01-01 | 9057554573187823076 | 2024-01-01 23:59:59 |
+| 6   | -2       | 456   | 2        | 4           | val 2       | 2.0  | true   | true     | false    | 2024-01-02 | 2071494770529563885 | 2024-01-02 23:59:59 |
+
+```
