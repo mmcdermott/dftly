@@ -47,6 +47,40 @@ def test_parse_parentheses_and_string_literal():
     assert isinstance(args[1], Literal) and args[1].value == "foo"
 
 
+def test_parse_nested_parentheses_operations():
+    text = """
+    a: (col1 + col2) - (col3 + col4)
+    b: flag1 and (flag2 or flag3)
+    c: not (flag1 or flag2)
+    """
+    schema = {
+        "col1": "int",
+        "col2": "int",
+        "col3": "int",
+        "col4": "int",
+        "flag1": "bool",
+        "flag2": "bool",
+        "flag3": "bool",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    a_expr = result["a"]
+    assert isinstance(a_expr, Expression) and a_expr.type == "SUBTRACT"
+    left, right = a_expr.arguments
+    assert isinstance(left, Expression) and left.type == "ADD"
+    assert isinstance(right, Expression) and right.type == "ADD"
+
+    b_expr = result["b"]
+    assert isinstance(b_expr, Expression) and b_expr.type == "AND"
+    assert isinstance(b_expr.arguments[1], Expression)
+    assert b_expr.arguments[1].type == "OR"
+
+    c_expr = result["c"]
+    assert isinstance(c_expr, Expression) and c_expr.type == "NOT"
+    inner = c_expr.arguments[0]
+    assert isinstance(inner, Expression) and inner.type == "OR"
+
+
 def test_parse_string_interpolate_dict_and_string_forms():
     text = """
     a:

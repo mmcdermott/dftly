@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional
 import re
 from datetime import datetime
 from dateutil import parser as dtparser
@@ -327,9 +327,9 @@ class DftlyTransformer(Transformer):
             val = int(text)
         return Literal(val)
 
-    def name(self, items: list[str]) -> str:  # type: ignore[override]
+    def name(self, items: list[str]) -> Any:  # type: ignore[override]
         (val,) = items
-        return val
+        return self.parser._as_node(val)
 
     def regex(self, items: list[Any]) -> str:  # type: ignore[override]
         (val,) = items
@@ -364,7 +364,7 @@ class DftlyTransformer(Transformer):
             },
         )
 
-    def cast_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
+    def primary(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items
         return item
 
@@ -470,14 +470,6 @@ class DftlyTransformer(Transformer):
         args["value"] = self.parser._as_node(value)
         return Expression("VALUE_IN_RANGE", args)
 
-    def plus(self, items: list[Any]) -> Tuple[str, Any]:  # type: ignore[override]
-        _, val = items
-        return "+", val
-
-    def minus(self, items: list[Any]) -> Tuple[str, Any]:  # type: ignore[override]
-        _, val = items
-        return "-", val
-
     def parse_as_format(self, items: list[Any]) -> Expression:  # type: ignore[override]
         expr, _, fmt = items
         fmt_text = fmt
@@ -493,22 +485,18 @@ class DftlyTransformer(Transformer):
         }
         return Expression("PARSE_WITH_FORMAT_STRING", args)
 
-    def parse_format(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
     def additive(self, items: list[Any]) -> Any:  # type: ignore[override]
-        base = self.parser._as_node(items[0])
         if len(items) == 1:
-            return base
-        ops = items[1:]
-        symbols = [s for s, _ in ops]
-        operands = [self.parser._as_node(v) for _, v in ops]
-        if all(sym == "+" for sym in symbols):
-            return Expression("ADD", [base] + operands)
-        if all(sym == "-" for sym in symbols) and len(symbols) == 1:
-            return Expression("SUBTRACT", [base, operands[0]])
-        raise ValueError("invalid arithmetic expression")
+            return self.parser._as_node(items[0])
+        left, op_token, right = items
+        left_node = self.parser._as_node(left)
+        right_node = self.parser._as_node(right)
+        op = str(op_token)
+        if op == "+":
+            if isinstance(left_node, Expression) and left_node.type == "ADD":
+                return Expression("ADD", left_node.arguments + [right_node])
+            return Expression("ADD", [left_node, right_node])
+        return Expression("SUBTRACT", [left_node, right_node])
 
     def and_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
         args = [self.parser._as_node(i) for i in items if not isinstance(i, Token)]
