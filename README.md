@@ -1,5 +1,16 @@
 # DataFrame Transformation Language from YAML (dftly)
 
+[![Python 3.12+](https://img.shields.io/badge/-Python_3.12+-blue?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3100/)
+[![PyPI - Version](https://img.shields.io/pypi/v/dftly)](https://pypi.org/project/dftly/)
+[![MEDS v0.4](https://img.shields.io/badge/MEDS-0.4-blue)](https://medical-event-data-standard.github.io/)
+[![Documentation Status](https://readthedocs.org/projects/dftly/badge/?version=latest)](https://dftly.readthedocs.io/en/latest/?badge=latest)
+[![Tests](https://github.com/mmcdermott/dftly/actions/workflows/tests.yaml/badge.svg)](https://github.com/mmcdermott/dftly/actions/workflows/tests.yaml)
+[![Test Coverage](https://codecov.io/github/mmcdermott/dftly/graph/badge.svg?token=BV119L5JQJ)](https://codecov.io/github/mmcdermott/dftly)
+[![Code Quality](https://github.com/mmcdermott/dftly/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/mmcdermott/dftly/actions/workflows/code-quality-main.yaml)
+[![Contributors](https://img.shields.io/github/contributors/mmcdermott/dftly.svg)](https://github.com/mmcdermott/dftly/graphs/contributors)
+[![Pull Requests](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/dftly/pulls)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/mmcdermott/dftly#license)
+
 Dftly (pronounced "deftly") is a simple, expressive, human-readable DSL for encoding simple tabular
 transformations over dataframes, designed for expression in YAML files. With dftly, you can transform your
 data, deftly!
