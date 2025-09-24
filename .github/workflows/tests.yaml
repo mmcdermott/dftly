@@ -24,7 +24,7 @@ jobs:
 
       - name: Run tests
         run: >
-          uv run pytest -v --cov=src --ignore=docs
+          uv run pytest -v --cov=src --ignore=docs --junitxml=junit.xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4.0.1
