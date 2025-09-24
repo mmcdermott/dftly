@@ -206,7 +206,7 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
             cleaned = inp.str.replace_all(r"[^0-9.+-]", "")
             if dtype is int:
                 return cleaned.str.to_integer()
-            return cleaned.str.to_decimal().cast(float)
+            return cleaned.str.to_decimal(scale=2).cast(float)
 
         return inp.str.strptime(dtype, fmt)
 

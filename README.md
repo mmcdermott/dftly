@@ -10,13 +10,26 @@ data, deftly!
 
 ## Installation
 
-`pip install dftly`
+> [!WARNING]
+> Not actually on pypi yet!
+
+```bash
+pip install dftly
+```
 
 To enable the optional polars execution engine, install with the extra:
 
 ```bash
 pip install "dftly[polars]"
 ```
+
+You can also install it locally via [`uv`](https://docs.astral.sh/uv/) via:
+
+```bash
+uv sync
+```
+
+from the root of the repository.
 
 ## Usage
 
