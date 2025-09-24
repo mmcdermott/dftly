@@ -25,4 +25,4 @@ runs:
     - name: Install packages
       shell: bash
       run: |
-        uv sync --locked --group ${{ inputs.group }} --extras polars
+        uv sync --locked --group ${{ inputs.group }} --extra polars
