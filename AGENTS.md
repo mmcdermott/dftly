@@ -41,7 +41,6 @@ pytest --doctest-glob=README.md
 ```bash
 # Run all pre-commit hooks
 pre-commit run --all-files
-
 ```
 
 ## Architecture
