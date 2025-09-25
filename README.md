@@ -20,9 +20,6 @@ data, deftly!
 
 ## Installation
 
-> [!WARNING]
-> Not actually on pypi yet!
-
 ```bash
 pip install dftly
 ```
