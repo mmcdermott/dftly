@@ -209,6 +209,45 @@ def test_polars_in_operator_string_forms():
     assert out.get_column("b").to_list() == [True, True, False]
 
 
+def test_polars_value_in_range_boundaries():
+    text = """
+    a:
+      value_in_range:
+        value: col1
+        min: 0
+        max: 2
+        min_inclusive: false
+        max_inclusive: false
+    b:
+      value_in_range:
+        value: col1
+        min: 1
+    c:
+      value_in_range:
+        value: col1
+        max: 2
+    """
+    result = from_yaml(text, input_schema={"col1": "int"})
+    expr_a = to_polars(result["a"])
+    expr_b = to_polars(result["b"])
+    expr_c = to_polars(result["c"])
+
+    expected_a = pl.lit(True) & (pl.col("col1") > 0)
+    expected_a = expected_a & (pl.col("col1") < 2)
+    expected_b = pl.lit(True) & (pl.col("col1") >= 1)
+    expected_c = pl.lit(True) & (pl.col("col1") <= 2)
+
+    assert expr_a.meta.eq(expected_a)
+    assert expr_b.meta.eq(expected_b)
+    assert expr_c.meta.eq(expected_c)
+
+    df = pl.DataFrame({"col1": [0, 1, 2, 3]})
+    out = df.with_columns(a=expr_a, b=expr_b, c=expr_c)
+    assert out.get_column("a").to_list() == [False, True, False, False]
+    assert out.get_column("b").to_list() == [False, True, True, True]
+    assert out.get_column("c").to_list() == [True, True, True, False]
+
+
 def test_polars_string_interpolate():
     text = """
     a:
