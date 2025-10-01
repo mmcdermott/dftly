@@ -103,26 +103,66 @@ You can also use a more direct, expansive form rather than the concise string fo
 ```python
 >>> yaml_text = """
 ... sum:
-...   add:
-...     - column: {name: col1}
-...     - column: {name: col2}
+...   expression:
+...     type: ADD
+...     arguments:
+...       - column: {name: col1, type: int}
+...       - column: {name: col2, type: int}
 ... foo_as_int:
-...   parse:
-...     input:
-...       column: {name: foo}
-...     output_type: int
+...   expression:
+...     type: PARSE_WITH_FORMAT_STRING
+...     arguments:
+...       input:
+...         column: {name: foo, type: str}
+...       format: {literal: "%i"}
+...       output_type: {literal: int}
+... col3_with_time:
+...   expression:
+...     type: RESOLVE_TIMESTAMP
+...     arguments:
+...       date:
+...         column: {name: col3, type: date}
+...       time:
+...         hour: {literal: 23}
+...         minute: {literal: 59}
+...         second: {literal: 59}
+... systolic_bp:
+...   expression:
+...     type: REGEX
+...     arguments:
+...       regex: {literal: "(\\\\d+)/(\\\\d+)"}
+...       action: {literal: EXTRACT}
+...       group: {literal: 1}
+...       input:
+...         column: {name: bp, type: str}
+... diastolic_bp:
+...   expression:
+...     type: REGEX
+...     arguments:
+...       regex: {literal: "(\\\\d+)/(\\\\d+)"}
+...       action: {literal: EXTRACT}
+...       group: {literal: 2}
+...       input:
+...         column: {name: bp, type: str}
+... interpolate:
+...   expression:
+...     type: STRING_INTERPOLATE
+...     arguments:
+...       pattern: {literal: "val {col1}"}
+...       inputs:
+...         col1:
+...           column: {name: col1, type: int}
 ... """
->>> # TODO: add other operations in explicit form.
 >>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
-shape: (2, 2)
-┌─────┬────────────┐
-│ sum ┆ foo_as_int │
-│ --- ┆ ---        │
-│ i64 ┆ i64        │
-╞═════╪════════════╡
-│ 4   ┆ 5          │
-│ 6   ┆ 6          │
-└─────┴────────────┘
+shape: (2, 6)
+┌─────┬────────────┬─────────────────────┬─────────────┬──────────────┬─────────────┐
+│ sum ┆ foo_as_int ┆ col3_with_time      ┆ systolic_bp ┆ diastolic_bp ┆ interpolate │
+│ --- ┆ ---        ┆ ---                 ┆ ---         ┆ ---          ┆ ---         │
+│ i64 ┆ i64        ┆ datetime[μs]        ┆ str         ┆ str          ┆ str         │
+╞═════╪════════════╪═════════════════════╪═════════════╪══════════════╪═════════════╡
+│ 4   ┆ 5          ┆ 2020-01-01 23:59:59 ┆ 120         ┆ 80           ┆ val 1       │
+│ 6   ┆ 6          ┆ 2021-06-15 23:59:59 ┆ null        ┆ null         ┆ val 2       │
+└─────┴────────────┴─────────────────────┴─────────────┴──────────────┴─────────────┘
 
 ```
 
