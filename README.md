@@ -82,19 +82,10 @@ from the `bp` column. We can express this in a YAML file as follows:
 ... diastolic_bp: extract group 2 of (\\d+)/(\\d+) from bp
 ... interpolate: "val {col1}"
 ... """
+>>> input_schema={"col1": "int", "col2": "int", "foo": "str", "col3": "date", "bp": "str"}
 >>> from dftly import from_yaml
 >>> from dftly.polars import map_to_polars
->>> ops = from_yaml(
-...     yaml_text,
-...     input_schema={
-...         "col1": "int",
-...         "col2": "int",
-...         "foo": "str",
-...         "col3": "date",
-...         "bp": "str",
-...     },
-... )
->>> df.select(**map_to_polars(ops))
+>>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
 shape: (2, 6)
 ┌─────┬────────────┬─────────────────────┬─────────────┬──────────────┬─────────────┐
 │ sum ┆ foo_as_int ┆ col3_with_time      ┆ systolic_bp ┆ diastolic_bp ┆ interpolate │
@@ -104,6 +95,34 @@ shape: (2, 6)
 │ 4   ┆ 5          ┆ 2020-01-01 23:59:59 ┆ 120         ┆ 80           ┆ val 1       │
 │ 6   ┆ 6          ┆ 2021-06-15 23:59:59 ┆ null        ┆ null         ┆ val 2       │
 └─────┴────────────┴─────────────────────┴─────────────┴──────────────┴─────────────┘
+
+```
+
+You can also use a more direct, expansive form rather than the concise string forms:
+
+```python
+>>> yaml_text = """
+... sum:
+...   add:
+...     - column: {name: col1}
+...     - column: {name: col2}
+... foo_as_int:
+...   parse:
+...     input:
+...       column: {name: foo}
+...     output_type: int
+... """
+>>> # TODO: add other operations in explicit form.
+>>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
+shape: (2, 2)
+┌─────┬────────────┐
+│ sum ┆ foo_as_int │
+│ --- ┆ ---        │
+│ i64 ┆ i64        │
+╞═════╪════════════╡
+│ 4   ┆ 5          │
+│ 6   ┆ 6          │
+└─────┴────────────┘
 
 ```
 
