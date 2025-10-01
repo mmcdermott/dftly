@@ -98,6 +98,68 @@ shape: (2, 6)
 
 ```
 
+### Operator precedence, grouping, and chaining
+
+The concise string forms follow a predictable order of operations. Parentheses
+always take priority and are the easiest way to make intent explicit, but when
+they are omitted the grammar evaluates expressions in the following order:
+
+1. Function calls, regex extraction/matching, column references, and literals
+2. The timestamp resolution operator (`@`)
+3. Addition and subtraction (`+`, `-`)
+4. Membership checks (`in {…}` / `in (…)`)
+5. Boolean negation (`not`, `!`)
+6. Boolean conjunction (`and`, `&&`)
+7. Boolean disjunction (`or`, `||`)
+8. Conditional expressions (`then if predicate else other`)
+
+Because conditional expressions are evaluated last, the portion before the
+`if` keyword is treated as the "then" branch, just like Python's ternary
+syntax. When you want the result of a conditional to be passed into another
+operator, wrap the ternary in parentheses (or move into the explicit mapping
+form) so that it is parsed as a single sub-expression.
+
+For example, suppose the `bp` column in the earlier Polars example contains a
+value such as `"2/3/4"`. A simple extraction like `extract group 1 of
+(\d+)/(\d+) from bp` would return `"2"` from that malformed row, because the
+regex happily matches the first two numbers it encounters. You can chain the
+regex match and conditional syntax together to guard the extraction:
+
+```python
+>>> df = pl.DataFrame({
+...     "col1": [1, 2, 3],
+...     "col2": [3, 4, 5],
+...     "foo": ["5", "6", "7"],
+...     "col3": [date(2020, 1, 1), date(2021, 6, 15), date(2022, 2, 2)],
+...     "bp": ["120/80", "2/3/4", None],
+... })
+>>> yaml_text = """
+... systolic_bp: extract group 1 of ^(\\d+)/(\\d+)$ from (bp if match ^(\\d+)/(\\d+)$ against bp else "null")
+... diastolic_bp: extract group 2 of ^(\\d+)/(\\d+)$ from (bp if match ^(\\d+)/(\\d+)$ against bp else "null")
+... """
+>>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
+shape: (3, 2)
+┌─────────────┬──────────────┐
+│ systolic_bp ┆ diastolic_bp │
+│ ---         ┆ ---          │
+│ str         ┆ str          │
+╞═════════════╪══════════════╡
+│ 120         ┆ 80           │
+│ null        ┆ null         │
+│ null        ┆ null         │
+└─────────────┴──────────────┘
+```
+
+Anchoring the regex with `^` and `$` ensures that only strings containing a
+single systolic/diastolic pair match; values with extra fragments such as
+`"2/3/4"` fail the guard and propagate `null`. The parentheses around the
+conditional ensure that the entire ternary expression is treated as the input to
+the `extract … from …` operator. Using a string such as `"null"` in the `else`
+branch is a convenient way to feed the extractor a value that will not
+match—Polars will emit `null` for that row. If you prefer to return a literal
+`null` from the conditional itself, switch to the dictionary form for the `else`
+branch (for example `else: {literal: null}`).
+
 You can also use a more direct, expansive form rather than the concise string forms:
 
 ```python
