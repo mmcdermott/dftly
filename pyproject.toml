@@ -18,13 +18,15 @@ classifiers = [
 ]
 dependencies = ["PyYAML", "lark", "python-dateutil"]
 
+[dependency-groups]
+dev = [
+  "pre-commit<4", "ruff", "pytest", "pytest-cov", "pretty-print-directory"
+] # Add your development (lint, test) dependencies here
+
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
-# Development dependencies
-dev = ["pre-commit<4", "ruff"]
-tests = ["pytest", "pytest-cov"]
-polars = ["polars"]
+polars = ["polars~=1.33.0"]
 
 [project.urls]
 Homepage = "https://github.com/mmcdermott/dftly"
