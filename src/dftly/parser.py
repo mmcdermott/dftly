@@ -216,6 +216,7 @@ class Parser:
         time_tokens = ["%H", "%I", "%M", "%S", "%p", "%X", "%T"]
         date_tokens = ["%Y", "%y", "%m", "%d", "%b", "%B", "%j", "%U", "%W", "%F"]
         num_tokens = {"%d", "%f", "%i", "%u", "%e", "%g"}
+        # TODO(mmd): %d is duplicated in num and date tokens
         tokens = [f"%{t}" for t in re.findall(r"%[^A-Za-z]*([A-Za-z])", fmt)]
         has_time = any(t in tokens for t in time_tokens)
         has_date = any(t in tokens for t in date_tokens)

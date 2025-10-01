@@ -40,33 +40,130 @@ from the root of the repository.
 
 ## Usage
 
-To parse a YAML mapping of output columns to operations, use `dftly.from_yaml`:
+Dftly is designed to make it easy to specify simple dataframe transformations in a YAML file (or a
+mapping-like format). In particular, with dftly, you can specify a mapping of output column names to
+expressions over input columns, then easily execute that over an input table.
+
+Suppose we have an input dataframe that looks like this:
 
 ```python
-from dftly import from_yaml
+>>> import polars as pl
+>>> from datetime import date
+>>> df = pl.DataFrame({
+...     "col1": [1, 2],
+...     "col2": [3, 4],
+...     "foo": ["5", "6"],
+...     "col3": [date(2020, 1, 1), date(2021, 6, 15)],
+...     "bp": ["120/80", "NULL"],
+... })
+>>> df
+shape: (2, 5)
+┌──────┬──────┬─────┬────────────┬────────┐
+│ col1 ┆ col2 ┆ foo ┆ col3       ┆ bp     │
+│ ---  ┆ ---  ┆ --- ┆ ---        ┆ ---    │
+│ i64  ┆ i64  ┆ str ┆ date       ┆ str    │
+╞══════╪══════╪═════╪════════════╪════════╡
+│ 1    ┆ 3    ┆ 5   ┆ 2020-01-01 ┆ 120/80 │
+│ 2    ┆ 4    ┆ 6   ┆ 2021-06-15 ┆ NULL   │
+└──────┴──────┴─────┴────────────┴────────┘
 
-text = """
-a: col1 + col2
-b: foo as int
-"""
-result = from_yaml(text, input_schema={"col1": "int", "col2": "int", "foo": "str"})
 ```
 
-String expressions are parsed using a [Lark](https://github.com/lark-parser/lark) grammar
-defined in `src/dftly/grammar.lark`, making the
-implementation extensible beyond the simple examples shown above.
-
-The returned object contains instances of `dftly.Expression`, `dftly.Column`, and `dftly.Literal` representing the fully resolved operations.
-
-If `polars` is installed, you can convert these resolved operations to `polars` expressions:
+But we want to produce a file that adds column `col1` and `col2` together, converts the strings in `foo` to
+integers, adds a timestamp onto the dates in `col3`, and extract the systolic and diastolic blood pressure
+from the `bp` column. We can express this in a YAML file as follows:
 
 ```python
-import polars as pl
-from dftly.polars import to_polars
+>>> yaml_text = """
+... sum: col1 + col2
+... foo_as_int: foo as "%i"
+... col3_with_time: col3 @ "11:59:59 p.m."
+... systolic_bp: extract group 1 of (\\d+)/(\\d+) from bp
+... diastolic_bp: extract group 2 of (\\d+)/(\\d+) from bp
+... interpolate: "val {col1}"
+... """
+>>> from dftly import from_yaml
+>>> from dftly.polars import map_to_polars
+>>> ops = from_yaml(
+...     yaml_text,
+...     input_schema={
+...         "col1": "int",
+...         "col2": "int",
+...         "foo": "str",
+...         "col3": "date",
+...         "bp": "str",
+...     },
+... )
+>>> df.select(**map_to_polars(ops))
+shape: (2, 6)
+┌─────┬────────────┬─────────────────────┬─────────────┬──────────────┬─────────────┐
+│ sum ┆ foo_as_int ┆ col3_with_time      ┆ systolic_bp ┆ diastolic_bp ┆ interpolate │
+│ --- ┆ ---        ┆ ---                 ┆ ---         ┆ ---          ┆ ---         │
+│ i64 ┆ i64        ┆ datetime[μs]        ┆ str         ┆ str          ┆ str         │
+╞═════╪════════════╪═════════════════════╪═════════════╪══════════════╪═════════════╡
+│ 4   ┆ 5          ┆ 2020-01-01 23:59:59 ┆ 120         ┆ 80           ┆ val 1       │
+│ 6   ┆ 6          ┆ 2021-06-15 23:59:59 ┆ null        ┆ null         ┆ val 2       │
+└─────┴────────────┴─────────────────────┴─────────────┴──────────────┴─────────────┘
 
-df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
-expr = to_polars(result["a"])
-df = df.with_columns(a=expr)
+```
+
+Here is another example, showcasing a variety of additional operation types:
+
+```python
+>>> df = pl.DataFrame({
+...     "col1": [1, None],
+...     "col2": [3, 4],
+...     "flag": [True, False],
+...     "flag1": [True, False],
+...     "flag2": [False, True],
+...     "chartdate": [date(2024, 1, 1), date(2024, 1, 2)],
+...     "text": ["foo123", "bar456"],
+...     "dt": ["2024-01-01", "2024-01-02"],
+... })
+>>> df
+shape: (2, 8)
+┌──────┬──────┬───────┬───────┬───────┬────────────┬────────┬────────────┐
+│ col1 ┆ col2 ┆ flag  ┆ flag1 ┆ flag2 ┆ chartdate  ┆ text   ┆ dt         │
+│ ---  ┆ ---  ┆ ---   ┆ ---   ┆ ---   ┆ ---        ┆ ---    ┆ ---        │
+│ i64  ┆ i64  ┆ bool  ┆ bool  ┆ bool  ┆ date       ┆ str    ┆ str        │
+╞══════╪══════╪═══════╪═══════╪═══════╪════════════╪════════╪════════════╡
+│ 1    ┆ 3    ┆ true  ┆ true  ┆ false ┆ 2024-01-01 ┆ foo123 ┆ 2024-01-01 │
+│ null ┆ 4    ┆ false ┆ false ┆ true  ┆ 2024-01-02 ┆ bar456 ┆ 2024-01-02 │
+└──────┴──────┴───────┴───────┴───────┴────────────┴────────┴────────────┘
+>>> spec = """
+... add: col1 + col2
+... coalesce:
+...   - col1
+...   - col2
+... conditional: col1 if flag else col2
+... in_set: col1 in {1, 2}
+... in_range: col1 in (3, 4]
+... bool_ops: flag1 && !flag2
+... parse: dt as "%Y-%m-%d"
+... hashed: hash(col1)
+... """
+>>> schema = {
+...     "col1": "int",
+...     "col2": "int",
+...     "flag": "bool",
+...     "flag1": "bool",
+...     "flag2": "bool",
+...     "chartdate": "date",
+...     "text": "str",
+...     "dt": "str",
+... }
+>>> ops = from_yaml(spec, input_schema=schema)
+>>> df.select(**map_to_polars(ops))
+shape: (2, 8)
+┌──────┬──────────┬─────────────┬────────┬──────────┬──────────┬────────────┬──────────────────────┐
+│ add  ┆ coalesce ┆ conditional ┆ in_set ┆ in_range ┆ bool_ops ┆ parse      ┆ hashed               │
+│ ---  ┆ ---      ┆ ---         ┆ ---    ┆ ---      ┆ ---      ┆ ---        ┆ ---                  │
+│ i64  ┆ i64      ┆ i64         ┆ bool   ┆ bool     ┆ bool     ┆ date       ┆ u64                  │
+╞══════╪══════════╪═════════════╪════════╪══════════╪══════════╪════════════╪══════════════════════╡
+│ 4    ┆ 1        ┆ 1           ┆ true   ┆ false    ┆ true     ┆ 2024-01-01 ┆ 9057554573187823076  │
+│ null ┆ 4        ┆ 4           ┆ null   ┆ null     ┆ false    ┆ 2024-01-02 ┆ 16397991471585692086 │
+└──────┴──────────┴─────────────┴────────┴──────────┴──────────┴────────────┴──────────────────────┘
+
 ```
 
 ## Design Documentation
@@ -704,81 +801,3 @@ format string, e.g., `col1 + col2 as '%m mo %d d'`.
 
 The snippet below demonstrates parsing a variety of syntax options and verifying
 the resulting expression types.
-
-```python
->>> from dftly import from_yaml
->>> spec = """
-... add: col1 + col2
-... subtract: col1 - col2
-... regex: extract (\\d+) from text
-... coalesce:
-...   - col1
-...   - col2
-... conditional: col1 if flag else col2
-... interpolate: "val {col1}"
-... cast: col1 as float
-... in_set: col1 in {1, 2}
-... in_range: col1 in [0, 10]
-... bool_ops: flag1 && !flag2
-... parse: dt as "%Y-%m-%d"
-... hashed: hash(col1)
-... timestamp: chartdate @ "11:59:59 p.m."
-... """
->>> schema = {
-...     "col1": "int",
-...     "col2": "int",
-...     "flag": "bool",
-...     "flag1": "bool",
-...     "flag2": "bool",
-...     "chartdate": "date",
-...     "text": "str",
-...     "dt": "str",
-... }
->>> ops = from_yaml(spec, input_schema=schema)
->>> [ops[k].type for k in (
-...     "add",
-...     "subtract",
-...     "regex",
-...     "coalesce",
-...     "conditional",
-...     "interpolate",
-...     "cast",
-...     "in_set",
-...     "in_range",
-...     "bool_ops",
-...     "parse",
-...     "hashed",
-...     "timestamp",
-... )]
-['ADD', 'SUBTRACT', 'REGEX', 'COALESCE', 'CONDITIONAL', 'STRING_INTERPOLATE', 'TYPE_CAST', 'VALUE_IN_LITERAL_SET', 'VALUE_IN_RANGE', 'AND', 'PARSE_WITH_FORMAT_STRING', 'HASH_TO_INT', 'RESOLVE_TIMESTAMP']
-
-```
-
-We can also execute these operations on a real `polars` dataframe:
-
-```python
->>> import polars as pl
->>> from datetime import date
->>> from dftly.polars import map_to_polars
->>> df = pl.DataFrame({
-...     "col1": [1, 2],
-...     "col2": [3, 4],
-...     "flag": [True, False],
-...     "flag1": [True, False],
-...     "flag2": [False, True],
-...     "chartdate": [date(2024, 1, 1), date(2024, 1, 2)],
-...     "text": ["foo123", "bar456"],
-...     "dt": ["2024-01-01", "2024-01-02"],
-... })
->>> df = df.with_columns(**map_to_polars(ops))
->>> with pl.Config(tbl_width_chars=200, tbl_cols=20, tbl_formatting="ASCII_MARKDOWN"):
-...     df.select(*ops)
-shape: (2, 13)
-| add | subtract | regex | coalesce | conditional | interpolate | cast | in_set | in_range | bool_ops | parse      | hashed              | timestamp           |
-| --- | ---      | ---   | ---      | ---         | ---         | ---  | ---    | ---      | ---      | ---        | ---                 | ---                 |
-| i64 | i64      | str   | i64      | i64         | str         | f64  | bool   | bool     | bool     | date       | u64                 | datetime[μs]        |
-|-----|----------|-------|----------|-------------|-------------|------|--------|----------|----------|------------|---------------------|---------------------|
-| 4   | -2       | 123   | 1        | 1           | val 1       | 1.0  | true   | true     | true     | 2024-01-01 | 9057554573187823076 | 2024-01-01 23:59:59 |
-| 6   | -2       | 456   | 2        | 4           | val 2       | 2.0  | true   | true     | false    | 2024-01-02 | 2071494770529563885 | 2024-01-02 23:59:59 |
-
-```
