@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping
 import string
-from datetime import datetime
+from datetime import datetime, timezone
+from dateutil import parser as dtparser
 
 try:
     import polars as pl
@@ -14,6 +15,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     ) from exc
 
 from .nodes import Column, Expression, Literal
+
+
+_CLOCK_TIME = object()
 
 
 _TYPE_MAP: dict[str, Any] = {
@@ -28,6 +32,9 @@ _TYPE_MAP: dict[str, Any] = {
     "date": pl.Date,
     "datetime": pl.Datetime,
     "duration": pl.Duration,
+    "time": _CLOCK_TIME,
+    "clock_time": _CLOCK_TIME,
+    "clock-time": _CLOCK_TIME,
 }
 
 
@@ -45,6 +52,14 @@ def to_polars(node: Any) -> pl.Expr:
 def map_to_polars(mapping: Mapping[str, Any]) -> Dict[str, pl.Expr]:
     """Convert a mapping of dftly nodes to polars expressions."""
     return {k: to_polars(v) for k, v in mapping.items()}
+
+
+def _ensure_naive_datetime(dt: datetime) -> datetime:
+    """Return a timezone-naive datetime in UTC for subtraction or casting."""
+
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _expr_to_polars(expr: Expression) -> pl.Expr:
@@ -98,6 +113,8 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
         inp = to_polars(args["input"])
         out_type = args["output_type"].value
         dtype = _TYPE_MAP.get(out_type.lower(), out_type)
+        if dtype is _CLOCK_TIME:
+            raise ValueError("TYPE_CAST does not support the 'clock_time' output type")
         return inp.cast(dtype)
     if typ == "CONDITIONAL":
         return (
@@ -196,31 +213,69 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
         raise ValueError("Invalid REGEX action")
     if typ == "PARSE_WITH_FORMAT_STRING":
         inp = to_polars(args["input"])
-        fmt = args.get("format")
-        if isinstance(fmt, Literal):
-            fmt = fmt.value
+        fmt_node = args.get("format")
+        if isinstance(fmt_node, Literal):
+            fmt = fmt_node.value
+        else:
+            fmt = fmt_node
         out_type = args.get("output_type")
         if isinstance(out_type, Literal):
             out_type = out_type.value
         dtype = _TYPE_MAP.get(str(out_type).lower(), out_type)
+        if dtype is _CLOCK_TIME:
+            dtype = pl.Duration
+
+        fmt_auto = isinstance(fmt, str) and fmt.upper() == "AUTO"
+        fmt_value = None if fmt_auto else fmt
 
         if dtype == pl.Duration:
             base = datetime(1900, 1, 1)
 
-            if fmt:
+            if fmt_auto:
 
                 def parse_func(val: str | None) -> object:
                     if val is None:
                         return None
                     try:
-                        dt = datetime.strptime(val, fmt)
+                        dt = dtparser.parse(val, default=base)
+                    except (ValueError, OverflowError, TypeError):
+                        return None
+                    dt = _ensure_naive_datetime(dt)
+                    return dt - base
+
+                return inp.map_elements(parse_func, return_dtype=pl.Duration)
+
+            if fmt_value:
+
+                def parse_func(val: str | None) -> object:
+                    if val is None:
+                        return None
+                    try:
+                        dt = datetime.strptime(val, fmt_value)
                     except Exception:
                         return None
+                    dt = _ensure_naive_datetime(dt)
                     return dt - base
 
                 return inp.map_elements(parse_func, return_dtype=pl.Duration)
 
             return inp.str.strptime(pl.Time).cast(pl.Duration)
+
+        if dtype in {pl.Date, pl.Datetime} and fmt_auto:
+
+            def parse_func(val: str | None) -> object:
+                if val is None:
+                    return None
+                try:
+                    dt = dtparser.parse(val)
+                except (ValueError, OverflowError, TypeError):
+                    return None
+                dt = _ensure_naive_datetime(dt)
+                if dtype == pl.Date:
+                    return dt.date()
+                return dt
+
+            return inp.map_elements(parse_func, return_dtype=dtype)
 
         if dtype in {int, float}:
             cleaned = inp.str.replace_all(r"[^0-9.+-]", "")
@@ -228,7 +283,7 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
                 return cleaned.str.to_integer()
             return cleaned.str.to_decimal(scale=2).cast(float)
 
-        return inp.str.strptime(dtype, fmt)
+        return inp.str.strptime(dtype, fmt_value)
 
     raise ValueError(f"Unsupported expression type: {expr.type}")
 
@@ -247,11 +302,20 @@ def _resolve_timestamp(args: Mapping[str, Any]) -> pl.Expr:
         month = date_expr.dt.month()
         day = date_expr.dt.day()
 
-    hour = to_polars(time["hour"])
-    minute = to_polars(time["minute"])
-    second = to_polars(time["second"])
+    base_datetime = pl.datetime(year, month, day, 0, 0, 0)
 
-    return pl.datetime(year, month, day, hour, minute, second)
+    if isinstance(time, Mapping):
+
+        def _component(name: str) -> pl.Expr:
+            node = time.get(name)
+            return to_polars(node) if node is not None else pl.lit(0)
+
+        hour = _component("hour")
+        minute = _component("minute")
+        second = _component("second")
+        return pl.datetime(year, month, day, hour, minute, second)
+
+    return base_datetime + to_polars(time)
 
 
 __all__ = ["to_polars", "map_to_polars"]
