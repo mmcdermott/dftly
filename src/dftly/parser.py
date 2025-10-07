@@ -7,8 +7,9 @@ from dateutil import parser as dtparser
 import string
 
 from importlib.resources import files
-from lark import Lark, Transformer, Token
+from lark import Lark, Transformer
 from lark.exceptions import LarkError, VisitError
+from .expressions import ExpressionRegistry
 from .nodes import Column, Expression, Literal
 
 # ---------------------------------------------------------------------------
@@ -33,44 +34,6 @@ DATE_TIME_RE = re.compile(
     r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2}),\s*(?P<time>.+)$",
     re.IGNORECASE,
 )
-
-# supported expression names for dictionary short-form
-_EXPR_TYPES = {
-    "ADD",
-    "SUBTRACT",
-    "COALESCE",
-    "AND",
-    "OR",
-    "NOT",
-    "TYPE_CAST",
-    "CONDITIONAL",
-    "RESOLVE_TIMESTAMP",
-    "VALUE_IN_LITERAL_SET",
-    "VALUE_IN_RANGE",
-    "STRING_INTERPOLATE",
-    "PARSE_WITH_FORMAT_STRING",
-    "HASH_TO_INT",
-    "HASH",
-    "REGEX",
-    "GREATER_THAN",
-    "GREATER_OR_EQUAL",
-    "LESS_THAN",
-    "LESS_OR_EQUAL",
-}
-
-_EXPR_ALIASES = {
-    "GT": "GREATER_THAN",
-    "GREATER_THAN": "GREATER_THAN",
-    "GTE": "GREATER_OR_EQUAL",
-    "GE": "GREATER_OR_EQUAL",
-    "GREATER_OR_EQUAL": "GREATER_OR_EQUAL",
-    "LT": "LESS_THAN",
-    "LESS_THAN": "LESS_THAN",
-    "LTE": "LESS_OR_EQUAL",
-    "LE": "LESS_OR_EQUAL",
-    "LESS_OR_EQUAL": "LESS_OR_EQUAL",
-}
-
 
 class Parser:
     """Parse simplified YAML-like structures into dftly nodes."""
@@ -114,101 +77,11 @@ class Parser:
         # dictionary short form for expressions
         if len(value) == 1:
             expr_type, args = next(iter(value.items()))
-            expr_upper = expr_type.upper()
-            if expr_type in {"parse_with_format_string", "parse"}:
-                parsed_args = self._parse_arguments(args)
-                if isinstance(parsed_args, Mapping):
-                    if "datetime_format" in parsed_args:
-                        parsed_args.setdefault(
-                            "format", parsed_args.pop("datetime_format")
-                        )
-                    if "duration_format" in parsed_args:
-                        parsed_args.setdefault(
-                            "format", parsed_args.pop("duration_format")
-                        )
-                        parsed_args.setdefault("output_type", Literal("duration"))
-                    if "numeric_format" in parsed_args:
-                        parsed_args.setdefault(
-                            "format", parsed_args.pop("numeric_format")
-                        )
-                        parsed_args.setdefault("output_type", Literal("float"))
-                return Expression("PARSE_WITH_FORMAT_STRING", parsed_args)
-            if expr_type in {
-                "regex_extract",
-                "regex_match",
-                "regex_not_match",
-            } and isinstance(args, Mapping):
-                action_map = {
-                    "regex_extract": "EXTRACT",
-                    "regex_match": "MATCH",
-                    "regex_not_match": "NOT_MATCH",
-                }
-                parsed_args = self._parse_arguments(args)
-                parsed_args.setdefault("action", Literal(action_map[expr_type]))
-                return Expression("REGEX", parsed_args)
-            expr_upper = _EXPR_ALIASES.get(expr_upper, expr_upper)
-            if expr_upper in _EXPR_TYPES:
-                if expr_upper == "STRING_INTERPOLATE" and isinstance(args, Mapping):
-                    pattern = args.get("pattern")
-                    inputs = args.get("inputs", {})
-                    pattern_node = (
-                        pattern if isinstance(pattern, Literal) else Literal(pattern)
-                    )
-                    parsed_inputs = {k: self._parse_value(v) for k, v in inputs.items()}
-                    parsed_args = {"pattern": pattern_node, "inputs": parsed_inputs}
-                else:
-                    parsed_args = self._parse_arguments(args)
-                if expr_upper in {
-                    "GREATER_THAN",
-                    "GREATER_OR_EQUAL",
-                    "LESS_THAN",
-                    "LESS_OR_EQUAL",
-                }:
-                    if isinstance(parsed_args, list):
-                        if len(parsed_args) != 2:
-                            raise ValueError(
-                                f"{expr_type} requires exactly two arguments"
-                            )
-                        parsed_args = {
-                            "left": parsed_args[0],
-                            "right": parsed_args[1],
-                        }
-                    elif isinstance(parsed_args, Mapping):
-                        if "left" not in parsed_args or "right" not in parsed_args:
-                            raise ValueError(
-                                f"{expr_type} mapping requires 'left' and 'right'"
-                            )
-                    else:
-                        raise TypeError(
-                            f"{expr_type} arguments must be mapping or list"
-                        )
-                if expr_upper == "HASH":
-                    expr_upper = "HASH_TO_INT"
-                return Expression(expr_upper, parsed_args)
-            if isinstance(args, Mapping) and any(
-                k in args
-                for k in {
-                    "format",
-                    "datetime_format",
-                    "duration_format",
-                    "numeric_format",
-                    "output_type",
-                }
-            ):
-                parsed_args = self._parse_arguments(args)
-                parsed_args.setdefault(
-                    "input",
-                    Column(expr_type, self.input_schema.get(expr_type)),
-                )
-                if "datetime_format" in parsed_args:
-                    parsed_args.setdefault("format", parsed_args.pop("datetime_format"))
-                if "duration_format" in parsed_args:
-                    parsed_args.setdefault("format", parsed_args.pop("duration_format"))
-                    parsed_args.setdefault("output_type", Literal("duration"))
-                if "numeric_format" in parsed_args:
-                    parsed_args.setdefault("format", parsed_args.pop("numeric_format"))
-                    parsed_args.setdefault("output_type", Literal("float"))
-                return Expression("PARSE_WITH_FORMAT_STRING", parsed_args)
+            registry_expr = ExpressionRegistry.create_from_mapping(
+                self, expr_type, args
+            )
+            if registry_expr is not None:
+                return registry_expr
 
         # generic mapping value
         return {k: self._parse_value(v) for k, v in value.items()}
@@ -387,15 +260,10 @@ class DftlyTransformer(Transformer):
         return item
 
     def cast(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        value = items[0]
-        out_type = items[-1]
-        return Expression(
-            "TYPE_CAST",
-            {
-                "input": self.parser._as_node(value),
-                "output_type": Literal(out_type),
-            },
-        )
+        result = ExpressionRegistry.create_from_tree("cast", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse cast expression")
+        return result
 
     def primary(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items
@@ -406,11 +274,14 @@ class DftlyTransformer(Transformer):
 
     def func(self, items: list[Any]) -> Expression:  # type: ignore[override]
         name = items[0]
-        if isinstance(name, str) and name.lower() == "hash":
-            name = "hash_to_int"
         args = items[1] if len(items) > 1 else []
+        result = ExpressionRegistry.create_from_tree(
+            "func", self.parser, [], name=name, args=args
+        )
+        if result is not None:
+            return result
         parsed_args = [self.parser._as_node(a) for a in args]
-        return Expression(name.upper(), parsed_args)
+        return Expression(str(name).upper(), parsed_args)
 
     def literal_set(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
         if not items:
@@ -455,158 +326,80 @@ class DftlyTransformer(Transformer):
         }
 
     def regex_extract(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        tokens = [i for i in items if not isinstance(i, Token)]
-        if len(tokens) == 3:
-            group_token, regex_text, expr = tokens
-            group = int(group_token)
-        else:
-            regex_text, expr = tokens
-            group = None
-        args: Dict[str, Any] = {
-            "regex": Literal(str(regex_text)),
-            "action": Literal("EXTRACT"),
-            "input": self.parser._as_node(expr),
-        }
-        if group is not None:
-            args["group"] = Literal(group)
-        return Expression("REGEX", args)
+        result = ExpressionRegistry.create_from_tree("regex_extract", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse regex extract expression")
+        return result
 
     def regex_match(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        tokens = [i for i in items if not isinstance(i, Token)]
-        regex_text, expr = tokens
-        action = (
-            "NOT_MATCH"
-            if any(isinstance(t, Token) and t.type == "NOT_MATCH" for t in items)
-            else "MATCH"
-        )
-        return Expression(
-            "REGEX",
-            {
-                "regex": Literal(str(regex_text)),
-                "action": Literal(action),
-                "input": self.parser._as_node(expr),
-            },
-        )
+        result = ExpressionRegistry.create_from_tree("regex_match", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse regex match expression")
+        return result
 
     def value_in_set(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        value = items[0]
-        set_vals = items[-1]
-        return Expression(
-            "VALUE_IN_LITERAL_SET",
-            {"value": self.parser._as_node(value), "set": set_vals},
-        )
+        result = ExpressionRegistry.create_from_tree("value_in_set", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse value-in-set expression")
+        return result
 
     def value_in_range(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        value = items[0]
-        range_args = items[-1]
-        args = dict(range_args)
-        args["value"] = self.parser._as_node(value)
-        return Expression("VALUE_IN_RANGE", args)
+        result = ExpressionRegistry.create_from_tree("value_in_range", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse value-in-range expression")
+        return result
 
     def parse_as_format(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        expr, _, fmt = items
-        fmt_text = fmt
-        if isinstance(fmt_text, str):
-            import ast
-
-            fmt_text = ast.literal_eval(fmt_text)
-        out_type = self.parser._infer_output_type(fmt_text)
-        args = {
-            "input": self.parser._as_node(expr),
-            "format": Literal(fmt_text),
-            "output_type": Literal(out_type),
-        }
-        return Expression("PARSE_WITH_FORMAT_STRING", args)
+        result = ExpressionRegistry.create_from_tree(
+            "parse_as_format", self.parser, items
+        )
+        if result is None:
+            raise ValueError("Unable to parse formatted parse expression")
+        return result
 
     def additive(self, items: list[Any]) -> Any:  # type: ignore[override]
-        if len(items) == 1:
-            return self.parser._as_node(items[0])
-        left, op_token, right = items
-        left_node = self.parser._as_node(left)
-        right_node = self.parser._as_node(right)
-        op = str(op_token)
-        if op == "+":
-            if isinstance(left_node, Expression) and left_node.type == "ADD":
-                return Expression("ADD", left_node.arguments + [right_node])
-            return Expression("ADD", [left_node, right_node])
-        return Expression("SUBTRACT", [left_node, right_node])
+        result = ExpressionRegistry.create_from_tree("additive", self.parser, items)
+        if result is None:
+            if len(items) == 1:
+                return self.parser._as_node(items[0])
+            raise ValueError("Unsupported additive expression")
+        return result
 
     def and_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        args = [self.parser._as_node(i) for i in items if not isinstance(i, Token)]
-        if len(args) == 1:
-            return args[0]
-        return Expression("AND", args)
+        result = ExpressionRegistry.create_from_tree("and_expr", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse AND expression")
+        return result
 
     def or_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        args = [self.parser._as_node(i) for i in items if not isinstance(i, Token)]
-        if len(args) == 1:
-            return args[0]
-        return Expression("OR", args)
+        result = ExpressionRegistry.create_from_tree("or_expr", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse OR expression")
+        return result
 
     def not_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        item = items[-1]
-        return Expression("NOT", [self.parser._as_node(item)])
+        result = ExpressionRegistry.create_from_tree("not_expr", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse NOT expression")
+        return result
 
     def ifexpr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        then = items[0]
-        pred = items[2]
-        els = items[4]
-        return Expression(
-            "CONDITIONAL",
-            {
-                "if": self.parser._as_node(pred),
-                "then": self.parser._as_node(then),
-                "else": self.parser._as_node(els),
-            },
-        )
+        result = ExpressionRegistry.create_from_tree("ifexpr", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse conditional expression")
+        return result
 
     def resolve_ts(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        left, _, right = items
-        parser = self.parser
-
-        left_node = parser._as_node(left)
-
-        text: Optional[str] = None
-        if isinstance(right, Literal) and isinstance(right.value, str):
-            text = right.value
-        elif isinstance(right, str):
-            text = right
-
-        if text is not None:
-            right_parsed = parser._parse_datetime_string(
-                text
-            ) or parser._parse_time_string(text)
-            if right_parsed is not None:
-                args: Dict[str, Any] = {}
-                if "date" in right_parsed and "year" not in right_parsed["date"]:
-                    right_parsed["date"]["year"] = left_node
-                    args.update(right_parsed)
-                elif "time" in right_parsed and "date" not in right_parsed:
-                    args["date"] = left_node
-                    args["time"] = right_parsed["time"]
-                else:
-                    args.update(right_parsed)
-                    args["date"] = left_node
-                return Expression("RESOLVE_TIMESTAMP", args)
-
-        return Expression(
-            "RESOLVE_TIMESTAMP",
-            {"date": left_node, "time": parser._as_node(right)},
-        )
+        result = ExpressionRegistry.create_from_tree("resolve_ts", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse RESOLVE_TIMESTAMP expression")
+        return result
 
     def compare_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        left, op_token, right = items
-        left_node = self.parser._as_node(left)
-        right_node = self.parser._as_node(right)
-        op_map = {
-            ">": "GREATER_THAN",
-            ">=": "GREATER_OR_EQUAL",
-            "<": "LESS_THAN",
-            "<=": "LESS_OR_EQUAL",
-        }
-        op = str(op_token)
-        expr_type = op_map[op]
-        return Expression(expr_type, {"left": left_node, "right": right_node})
+        result = ExpressionRegistry.create_from_tree("compare_expr", self.parser, items)
+        if result is None:
+            raise ValueError("Unable to parse comparison expression")
+        return result
 
     def start(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items
