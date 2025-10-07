@@ -1,5 +1,6 @@
 import pytest
-from dftly import from_yaml, Column, Expression, Literal
+from dftly import Column, Expression, Literal, Parser, from_yaml
+from dftly.expressions import ExpressionRegistry
 
 
 def test_parse_addition():
@@ -26,6 +27,27 @@ def test_parse_function_call():
     assert isinstance(args, list) and len(args) == 2
     assert isinstance(args[0], Column) and args[0].name == "col1"
     assert isinstance(args[1], Column) and args[1].name == "col2"
+
+
+def test_expression_registry_mapping_lookup():
+    parser = Parser(input_schema={"col1": "int"})
+    expr = ExpressionRegistry.create_from_mapping(parser, "hash", ["col1"])
+    assert expr is not None
+    assert expr.type == "HASH_TO_INT"
+    args = expr.arguments
+    assert isinstance(args, list)
+    assert isinstance(args[0], Column) and args[0].name == "col1"
+
+
+def test_expression_registry_tree_lookup():
+    parser = Parser(input_schema={"col1": "int"})
+    expr = ExpressionRegistry.create_from_tree(
+        "func", parser, [], name="hash", args=["col1"]
+    )
+    assert isinstance(expr, Expression)
+    assert expr.type == "HASH_TO_INT"
+    serialized = expr.to_dict()
+    assert serialized["expression"]["type"] == "HASH_TO_INT"
 
 
 def test_parse_literal_string():
