@@ -1,5 +1,8 @@
-import polars as pl
+import pytest
 
+pytest.importorskip("polars")
+
+import polars as pl
 from dftly import from_yaml
 from dftly.polars import to_polars
 

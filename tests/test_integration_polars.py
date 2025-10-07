@@ -1,9 +1,13 @@
 import io
-import polars as pl
 from datetime import datetime
+
+import pytest
+
+pytest.importorskip("polars")
+
+import polars as pl
 from dftly import from_yaml
 from dftly.polars import map_to_polars
-
 
 CSV_TEXT = """col1,col2,col3,flag,chartdate
 1,2,0,True,2024-01-01

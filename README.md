@@ -46,8 +46,18 @@ expressions over input columns, then easily execute that over an input table.
 
 Suppose we have an input dataframe that looks like this:
 
+The following examples require [Polars](https://pola.rs/). When Polars is not
+installed, the doctests are skipped.
+
 ```python
->>> import polars as pl
+>>> import importlib
+>>> import pytest
+>>> if importlib.util.find_spec("polars") is None:
+...     pytest.skip("Polars is required for the README examples.")
+```
+
+```python
+>>> import polars as pl  # doctest: +SKIP
 >>> from datetime import date
 >>> df = pl.DataFrame({
 ...     "col1": [1, 2],
@@ -74,7 +84,7 @@ integers, adds a timestamp onto the dates in `col3`, and extract the systolic an
 from the `bp` column. We can express this in a YAML file as follows:
 
 ```python
->>> yaml_text = """
+>>> yaml_text = """  # doctest: +SKIP
 ... sum: col1 + col2
 ... foo_as_int: foo as "%i"
 ... col3_with_time: col3 @ "11:59:59 p.m."
@@ -120,13 +130,12 @@ operator, wrap the ternary in parentheses (or move into the explicit mapping
 form) so that it is parsed as a single sub-expression.
 
 For example, suppose the `bp` column in the earlier Polars example contains a
-value such as `"2/3/4"`. A simple extraction like `extract group 1 of
-(\d+)/(\d+) from bp` would return `"2"` from that malformed row, because the
+value such as `"2/3/4"`. A simple extraction like `extract group 1 of (\d+)/(\d+) from bp` would return `"2"` from that malformed row, because the
 regex happily matches the first two numbers it encounters. You can chain the
 regex match and conditional syntax together to guard the extraction:
 
 ```python
->>> df = pl.DataFrame({
+>>> df = pl.DataFrame({  # doctest: +SKIP
 ...     "col1": [1, 2, 3],
 ...     "col2": [3, 4, 5],
 ...     "foo": ["5", "6", "7"],
@@ -163,7 +172,7 @@ branch (for example `else: {literal: null}`).
 You can also use a more direct, expansive form rather than the concise string forms:
 
 ```python
->>> yaml_text = """
+>>> yaml_text = """  # doctest: +SKIP
 ... sum:
 ...   add:
 ...     - column: {name: col1}
@@ -191,7 +200,7 @@ shape: (2, 2)
 Here is another example, showcasing a variety of additional operation types:
 
 ```python
->>> df = pl.DataFrame({
+>>> df = pl.DataFrame({  # doctest: +SKIP
 ...     "col1": [1, None],
 ...     "col2": [3, 4],
 ...     "flag": [True, False],
