@@ -34,16 +34,6 @@ DATE_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
-_REGEX_EXTRACT_RE = re.compile(
-    r"^extract(?:\s+group\s+(?P<group>\d+)\s+of)?\s+(?P<regex>.+?)\s+from\s+(?P<input>.+)$",
-    re.IGNORECASE,
-)
-
-_REGEX_MATCH_RE = re.compile(
-    r"^(?P<neg>not\s+)?match\s+(?P<regex>.+?)\s+against\s+(?P<input>.+)$",
-    re.IGNORECASE,
-)
-
 # supported expression names for dictionary short-form
 _EXPR_TYPES = {
     "ADD",
