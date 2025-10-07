@@ -58,10 +58,10 @@ class _ComparatorExpression(ExpressionNode):
         left_expr = to_polars(args["left"])
         right_expr = to_polars(args["right"])
         comparator_map = {
-            "GREATER_THAN": lambda l, r: l > r,
-            "GREATER_OR_EQUAL": lambda l, r: l >= r,
-            "LESS_THAN": lambda l, r: l < r,
-            "LESS_OR_EQUAL": lambda l, r: l <= r,
+            "GREATER_THAN": lambda left, right: left > right,
+            "GREATER_OR_EQUAL": lambda left, right: left >= right,
+            "LESS_THAN": lambda left, right: left < right,
+            "LESS_OR_EQUAL": lambda left, right: left <= right,
         }
         return comparator_map[cls.type](left_expr, right_expr)
 

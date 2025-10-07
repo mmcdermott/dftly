@@ -313,7 +313,13 @@ class ParseWithFormatStringExpression(ExpressionNode):
             return True
         if isinstance(args, Mapping) and any(
             key in args
-            for key in {"format", "datetime_format", "duration_format", "numeric_format", "output_type"}
+            for key in {
+                "format",
+                "datetime_format",
+                "duration_format",
+                "numeric_format",
+                "output_type",
+            }
         ):
             return True
         return False
@@ -592,7 +598,9 @@ class RegexExpression(ExpressionNode):
     def to_polars(cls, expr: Expression, to_polars, *, pl: Any) -> Any:
         args = expr.arguments
         pattern_node = args["regex"]
-        pattern = pattern_node.value if isinstance(pattern_node, Literal) else pattern_node
+        pattern = (
+            pattern_node.value if isinstance(pattern_node, Literal) else pattern_node
+        )
         inp = to_polars(args["input"])
         action = args.get("action")
         if isinstance(action, Literal):

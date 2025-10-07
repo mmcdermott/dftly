@@ -1,8 +1,24 @@
 from __future__ import annotations
 
-from typing import Any, Callable, ClassVar, Iterable, List, Mapping, Optional, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Iterable,
+    List,
+    Optional,
+    TYPE_CHECKING,
+    Type,
+    TypeVar,
+)
 
 from ..nodes import Expression
+
+
+if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
+    from ..parser import Parser
+else:  # pragma: no cover - runtime fallback to keep annotations working
+    Parser = Any
 
 
 class ExpressionNode:
@@ -121,7 +137,10 @@ class ExpressionRegistry:
     def get(cls, type_name: str) -> Optional[Type[ExpressionNode]]:
         normalized = type_name.upper()
         for node_cls in cls._registry:
-            alias_set = {node_cls.type, *(node_cls._normalize(a) for a in node_cls.aliases)}
+            alias_set = {
+                node_cls.type,
+                *(node_cls._normalize(a) for a in node_cls.aliases),
+            }
             if normalized in alias_set:
                 return node_cls
         return None

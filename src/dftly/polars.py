@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Mapping
-import string
 from datetime import datetime, timezone
-from dateutil import parser as dtparser
 
 try:
     import polars as pl
@@ -65,6 +63,7 @@ def _ensure_naive_datetime(dt: datetime) -> datetime:
 
 def _expr_to_polars(expr: Expression) -> pl.Expr:
     return ExpressionRegistry.to_polars(expr, to_polars, pl=pl)
+
 
 def _resolve_timestamp(args: Mapping[str, Any]) -> pl.Expr:
     date = args["date"]

@@ -35,6 +35,7 @@ DATE_TIME_RE = re.compile(
     re.IGNORECASE,
 )
 
+
 class Parser:
     """Parse simplified YAML-like structures into dftly nodes."""
 
@@ -326,7 +327,9 @@ class DftlyTransformer(Transformer):
         }
 
     def regex_extract(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("regex_extract", self.parser, items)
+        result = ExpressionRegistry.create_from_tree(
+            "regex_extract", self.parser, items
+        )
         if result is None:
             raise ValueError("Unable to parse regex extract expression")
         return result
@@ -344,7 +347,9 @@ class DftlyTransformer(Transformer):
         return result
 
     def value_in_range(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("value_in_range", self.parser, items)
+        result = ExpressionRegistry.create_from_tree(
+            "value_in_range", self.parser, items
+        )
         if result is None:
             raise ValueError("Unable to parse value-in-range expression")
         return result
