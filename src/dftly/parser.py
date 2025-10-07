@@ -62,6 +62,23 @@ _EXPR_TYPES = {
     "HASH_TO_INT",
     "HASH",
     "REGEX",
+    "GREATER_THAN",
+    "GREATER_OR_EQUAL",
+    "LESS_THAN",
+    "LESS_OR_EQUAL",
+}
+
+_EXPR_ALIASES = {
+    "GT": "GREATER_THAN",
+    "GREATER_THAN": "GREATER_THAN",
+    "GTE": "GREATER_OR_EQUAL",
+    "GE": "GREATER_OR_EQUAL",
+    "GREATER_OR_EQUAL": "GREATER_OR_EQUAL",
+    "LT": "LESS_THAN",
+    "LESS_THAN": "LESS_THAN",
+    "LTE": "LESS_OR_EQUAL",
+    "LE": "LESS_OR_EQUAL",
+    "LESS_OR_EQUAL": "LESS_OR_EQUAL",
 }
 
 
@@ -139,6 +156,7 @@ class Parser:
                 parsed_args = self._parse_arguments(args)
                 parsed_args.setdefault("action", Literal(action_map[expr_type]))
                 return Expression("REGEX", parsed_args)
+            expr_upper = _EXPR_ALIASES.get(expr_upper, expr_upper)
             if expr_upper in _EXPR_TYPES:
                 if expr_upper == "STRING_INTERPOLATE" and isinstance(args, Mapping):
                     pattern = args.get("pattern")
@@ -150,6 +168,30 @@ class Parser:
                     parsed_args = {"pattern": pattern_node, "inputs": parsed_inputs}
                 else:
                     parsed_args = self._parse_arguments(args)
+                if expr_upper in {
+                    "GREATER_THAN",
+                    "GREATER_OR_EQUAL",
+                    "LESS_THAN",
+                    "LESS_OR_EQUAL",
+                }:
+                    if isinstance(parsed_args, list):
+                        if len(parsed_args) != 2:
+                            raise ValueError(
+                                f"{expr_type} requires exactly two arguments"
+                            )
+                        parsed_args = {
+                            "left": parsed_args[0],
+                            "right": parsed_args[1],
+                        }
+                    elif isinstance(parsed_args, Mapping):
+                        if "left" not in parsed_args or "right" not in parsed_args:
+                            raise ValueError(
+                                f"{expr_type} mapping requires 'left' and 'right'"
+                            )
+                    else:
+                        raise TypeError(
+                            f"{expr_type} arguments must be mapping or list"
+                        )
                 if expr_upper == "HASH":
                     expr_upper = "HASH_TO_INT"
                 return Expression(expr_upper, parsed_args)
@@ -203,7 +245,7 @@ class Parser:
             return interp
 
         if re.search(
-            r"(?:\s[+\-@]\s)|(?:&&|\|\||!)|\b(?:as|if|else|and|or|in|not)\b",
+            r"(?:\s[+\-@]\s)|(?:>=|<=|>|<)|(?:&&|\|\||!)|\b(?:as|if|else|and|or|in|not)\b",
             value,
             re.IGNORECASE,
         ):
@@ -561,6 +603,20 @@ class DftlyTransformer(Transformer):
             "RESOLVE_TIMESTAMP",
             {"date": left_node, "time": parser._as_node(right)},
         )
+
+    def compare_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
+        left, op_token, right = items
+        left_node = self.parser._as_node(left)
+        right_node = self.parser._as_node(right)
+        op_map = {
+            ">": "GREATER_THAN",
+            ">=": "GREATER_OR_EQUAL",
+            "<": "LESS_THAN",
+            "<=": "LESS_OR_EQUAL",
+        }
+        op = str(op_token)
+        expr_type = op_map[op]
+        return Expression(expr_type, {"left": left_node, "right": right_node})
 
     def start(self, items: list[Any]) -> Any:  # type: ignore[override]
         (item,) = items

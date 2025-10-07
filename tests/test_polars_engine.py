@@ -157,6 +157,59 @@ def test_polars_boolean_symbol_forms():
     assert out.get_column("c").to_list() == [False, True]
 
 
+def test_polars_comparison_operations():
+    text = """
+    gt: int_col > int_limit
+    ge: dt_col >= dt_limit
+    lt: date_col < date_limit
+    le: time_col <= time_limit
+    """
+    schema = {
+        "int_col": "int",
+        "int_limit": "int",
+        "dt_col": "datetime",
+        "dt_limit": "datetime",
+        "date_col": "date",
+        "date_limit": "date",
+        "time_col": "time",
+        "time_limit": "time",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    from datetime import date, datetime, time
+
+    df = pl.DataFrame(
+        {
+            "int_col": [1, 3],
+            "int_limit": [0, 3],
+            "dt_col": [
+                datetime(2024, 1, 1, 12, 0, 0),
+                datetime(2024, 1, 1, 13, 0, 0),
+            ],
+            "dt_limit": [
+                datetime(2024, 1, 1, 11, 30, 0),
+                datetime(2024, 1, 1, 13, 30, 0),
+            ],
+            "date_col": [date(2024, 1, 1), date(2024, 1, 3)],
+            "date_limit": [date(2024, 1, 2), date(2024, 1, 3)],
+            "time_col": [time(12, 0, 0), time(12, 30, 0)],
+            "time_limit": [time(12, 0, 0), time(12, 15, 0)],
+        }
+    )
+
+    out = df.with_columns(
+        gt=to_polars(result["gt"]),
+        ge=to_polars(result["ge"]),
+        lt=to_polars(result["lt"]),
+        le=to_polars(result["le"]),
+    )
+
+    assert out.get_column("gt").to_list() == [True, False]
+    assert out.get_column("ge").to_list() == [True, False]
+    assert out.get_column("lt").to_list() == [True, False]
+    assert out.get_column("le").to_list() == [True, False]
+
+
 def test_polars_nested_parentheses_operations():
     text = """
     a: (col1 + col2) - (col3 + col4)

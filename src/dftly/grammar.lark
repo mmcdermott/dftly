@@ -5,6 +5,10 @@ STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
 PLUS: "+"
 MINUS: "-"
 AT: "@"
+GE: ">="
+LE: "<="
+GT: ">"
+LT: "<"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
@@ -43,11 +47,14 @@ conditional: bool_expr IF bool_expr ELSE expr   -> ifexpr
           | bool_factor
 
 ?bool_factor: (NOT|NOT_SYM) bool_factor       -> not_expr
-            | in_expr
+            | membership
 
-?in_expr: additive IN set_literal        -> value_in_set
-        | additive IN range_literal      -> value_in_range
-        | additive
+?membership: additive IN set_literal        -> value_in_set
+           | additive IN range_literal      -> value_in_range
+           | comparison
+
+?comparison: additive (GE|LE|GT|LT) additive   -> compare_expr
+           | additive
 
 ?additive: additive PLUS multiplicative
          | additive MINUS multiplicative
