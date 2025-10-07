@@ -208,6 +208,94 @@ def test_parse_boolean_symbol_forms():
     assert not_expr.type == "NOT"
 
 
+def test_parse_comparison_string_forms():
+    text = """
+    gt: col1 > col2
+    ge: ts >= cutoff
+    lt: col1 < 10
+    le: col2 <= col1
+    """
+    schema = {
+        "col1": "int",
+        "col2": "int",
+        "ts": "datetime",
+        "cutoff": "datetime",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    gt_expr = result["gt"]
+    assert isinstance(gt_expr, Expression) and gt_expr.type == "GREATER_THAN"
+    assert isinstance(gt_expr.arguments["left"], Column)
+    assert isinstance(gt_expr.arguments["right"], Column)
+
+    ge_expr = result["ge"]
+    assert isinstance(ge_expr, Expression) and ge_expr.type == "GREATER_OR_EQUAL"
+    assert isinstance(ge_expr.arguments["left"], Column)
+    assert isinstance(ge_expr.arguments["right"], Column)
+
+    lt_expr = result["lt"]
+    assert isinstance(lt_expr, Expression) and lt_expr.type == "LESS_THAN"
+    assert isinstance(lt_expr.arguments["left"], Column)
+    assert isinstance(lt_expr.arguments["right"], Literal)
+    assert lt_expr.arguments["right"].value == 10
+
+    le_expr = result["le"]
+    assert isinstance(le_expr, Expression) and le_expr.type == "LESS_OR_EQUAL"
+    assert isinstance(le_expr.arguments["left"], Column)
+    assert isinstance(le_expr.arguments["right"], Column)
+
+
+def test_parse_comparison_short_forms():
+    text = """
+    gt_expr:
+      gt:
+        left: col1
+        right: 5
+    ge_expr:
+      ge:
+        left: ts
+        right: cutoff
+    lt_expr:
+      lt:
+        - col2
+        - col1
+    le_expr:
+      less_or_equal:
+        left: col1
+        right: col2
+    """
+    schema = {
+        "col1": "int",
+        "col2": "int",
+        "ts": "datetime",
+        "cutoff": "datetime",
+    }
+    result = from_yaml(text, input_schema=schema)
+
+    gt_expr = result["gt_expr"]
+    assert isinstance(gt_expr, Expression) and gt_expr.type == "GREATER_THAN"
+    assert isinstance(gt_expr.arguments["left"], Column)
+    assert isinstance(gt_expr.arguments["right"], Literal)
+    assert gt_expr.arguments["right"].value == 5
+
+    ge_expr = result["ge_expr"]
+    assert isinstance(ge_expr, Expression) and ge_expr.type == "GREATER_OR_EQUAL"
+    assert isinstance(ge_expr.arguments["left"], Column)
+    assert ge_expr.arguments["left"].name == "ts"
+
+    lt_expr = result["lt_expr"]
+    assert isinstance(lt_expr, Expression) and lt_expr.type == "LESS_THAN"
+    assert isinstance(lt_expr.arguments["left"], Column)
+    assert lt_expr.arguments["left"].name == "col2"
+    assert isinstance(lt_expr.arguments["right"], Column)
+    assert lt_expr.arguments["right"].name == "col1"
+
+    le_expr = result["le_expr"]
+    assert isinstance(le_expr, Expression) and le_expr.type == "LESS_OR_EQUAL"
+    assert isinstance(le_expr.arguments["left"], Column)
+    assert isinstance(le_expr.arguments["right"], Column)
+
+
 def test_parse_value_in_set_and_range():
     text = """
     a:

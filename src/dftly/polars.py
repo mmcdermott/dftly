@@ -74,6 +74,26 @@ def _expr_to_polars(expr: Expression) -> pl.Expr:
     if typ == "NOT":
         (arg,) = args
         return ~to_polars(arg)
+    if typ in {
+        "GREATER_THAN",
+        "GREATER_OR_EQUAL",
+        "LESS_THAN",
+        "LESS_OR_EQUAL",
+    }:
+        comparator_map = {
+            "GREATER_THAN": lambda left_expr, right_expr: left_expr > right_expr,
+            "GREATER_OR_EQUAL": lambda left_expr, right_expr: left_expr >= right_expr,
+            "LESS_THAN": lambda left_expr, right_expr: left_expr < right_expr,
+            "LESS_OR_EQUAL": lambda left_expr, right_expr: left_expr <= right_expr,
+        }
+        if isinstance(args, Mapping):
+            left = args["left"]
+            right = args["right"]
+        else:
+            left, right = args
+        left_expr = to_polars(left)
+        right_expr = to_polars(right)
+        return comparator_map[typ](left_expr, right_expr)
     if typ == "TYPE_CAST":
         inp = to_polars(args["input"])
         out_type = args["output_type"].value

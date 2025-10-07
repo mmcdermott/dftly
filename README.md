@@ -185,6 +185,57 @@ shape: (2, 8)
 
 ```
 
+You can also compare values directly across numeric, date, time, and datetime
+columns using both symbolic and fully-resolved forms:
+
+```python
+>>> from datetime import date, datetime, time
+>>> df = pl.DataFrame({
+...     "int_col": [1, 3],
+...     "int_limit": [0, 3],
+...     "dt_col": [
+...         datetime(2024, 1, 1, 12, 0, 0),
+...         datetime(2024, 1, 1, 13, 0, 0),
+...     ],
+...     "dt_limit": [
+...         datetime(2024, 1, 1, 11, 30, 0),
+...         datetime(2024, 1, 1, 13, 30, 0),
+...     ],
+...     "date_col": [date(2024, 1, 1), date(2024, 1, 3)],
+...     "date_limit": [date(2024, 1, 2), date(2024, 1, 3)],
+...     "time_col": [time(12, 0, 0), time(12, 30, 0)],
+...     "time_limit": [time(12, 0, 0), time(12, 15, 0)],
+... })
+>>> spec = """
+... gt: int_col > int_limit
+... ge: dt_col >= dt_limit
+... lt: date_col < date_limit
+... le: time_col <= time_limit
+... """
+>>> schema = {
+...     "int_col": "int",
+...     "int_limit": "int",
+...     "dt_col": "datetime",
+...     "dt_limit": "datetime",
+...     "date_col": "date",
+...     "date_limit": "date",
+...     "time_col": "time",
+...     "time_limit": "time",
+... }
+>>> ops = from_yaml(spec, input_schema=schema)
+>>> df.select(**map_to_polars(ops))
+shape: (2, 4)
+┌───────┬───────┬───────┬───────┐
+│ gt    ┆ ge    ┆ lt    ┆ le    │
+│ ---   ┆ ---   ┆ ---   ┆ ---   │
+│ bool  ┆ bool  ┆ bool  ┆ bool  │
+╞═══════╪═══════╪═══════╪═══════╡
+│ true  ┆ true  ┆ true  ┆ true  │
+│ false ┆ false ┆ false ┆ false │
+└───────┴───────┴───────┴───────┘
+
+```
+
 ## Design Documentation
 
 ### Key Principles
