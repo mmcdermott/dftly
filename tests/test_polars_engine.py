@@ -92,6 +92,58 @@ def test_polars_resolve_timestamp():
     assert out[1].hour == 23 and out[1].minute == 59 and out[1].second == 59
 
 
+def test_polars_resolve_timestamp_with_parsed_time_expression():
+    text = """
+    a:
+      expression:
+        type: RESOLVE_TIMESTAMP
+        arguments:
+          date:
+            column: {name: charttime, type: date}
+          time:
+            expression:
+              type: PARSE_WITH_FORMAT_STRING
+              arguments:
+                input: {literal: "11:59:59 p.m."}
+                output_type: {literal: clock_time}
+                format: {literal: AUTO}
+    """
+    schema = {"charttime": "date"}
+    result = from_yaml(text, input_schema=schema)
+    expr = to_polars(result["a"])
+
+    from datetime import date
+
+    df = pl.DataFrame({"charttime": [date(2020, 1, 1), date(2021, 1, 1)]})
+    out = df.with_columns(a=expr).get_column("a")
+    assert out[0].hour == 23 and out[0].minute == 59 and out[0].second == 59
+    assert out[1].hour == 23 and out[1].minute == 59 and out[1].second == 59
+
+
+def test_polars_parse_clock_time_aliases():
+    text = """
+    a:
+      expression:
+        type: PARSE_WITH_FORMAT_STRING
+        arguments:
+          input: {literal: "11:00:01 pm"}
+          output_type: {literal: clock_time}
+          format: {literal: AUTO}
+    b:
+      expression:
+        type: PARSE_WITH_FORMAT_STRING
+        arguments:
+          input: {literal: "11:00:01 pm"}
+          output_type: {literal: time}
+          format: {literal: AUTO}
+    """
+    result = from_yaml(text)
+
+    df = pl.DataFrame({"dummy": [1]})
+    out = df.select(a=to_polars(result["a"]), b=to_polars(result["b"]))
+    assert out["a"][0] == out["b"][0]
+
+
 def test_polars_boolean_and_coalesce_and_membership():
     text = """
     a: flag1 and flag2

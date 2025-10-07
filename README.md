@@ -123,9 +123,12 @@ You can also use a more direct, expansive form rather than the concise string fo
 ...       date:
 ...         column: {name: col3, type: date}
 ...       time:
-...         hour: {literal: 23}
-...         minute: {literal: 59}
-...         second: {literal: 59}
+...         expression:
+...           type: PARSE_WITH_FORMAT_STRING
+...           arguments:
+...             input: {literal: "11:59:59 p.m."}
+...             output_type: {literal: clock_time}
+...             format: {literal: AUTO}
 ... systolic_bp:
 ...   expression:
 ...     type: REGEX
