@@ -75,17 +75,19 @@ from the `bp` column. We can express this in a YAML file as follows:
 
 ```python
 >>> yaml_text = """
-... sum: col1 + col2
-... foo_as_int: foo as "%i"
-... col3_with_time: col3 @ "11:59:59 p.m."
-... systolic_bp: extract group 1 of (\\d+)/(\\d+) from bp
-... diastolic_bp: extract group 2 of (\\d+)/(\\d+) from bp
-... interpolate: "val {col1}"
+... sum: @col1 + @col2
+... foo_as_int: @foo as "%i"
+... col3_with_time: @col3 @ "11:59:59 p.m."
+... systolic_bp: extract group 1 of (\\d+)/(\\d+) from @bp
+... diastolic_bp: extract group 2 of (\\d+)/(\\d+) from @bp
+... interpolate: "val {@col1}"
 ... """
->>> input_schema={"col1": "int", "col2": "int", "foo": "str", "col3": "date", "bp": "str"}
->>> from dftly import from_yaml
+>>> schema={"col1": "int", "col2": "int", "foo": "str", "col3": "date", "bp": "str"}
+>>> from dftly import from_yaml, validate_schema
 >>> from dftly.polars import map_to_polars
->>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
+>>> ops = from_yaml(yaml_text)
+>>> validate_schema(ops, schema)
+>>> df.select(**map_to_polars(ops))
 shape: (2, 6)
 ┌─────┬────────────┬─────────────────────┬─────────────┬──────────────┬─────────────┐
 │ sum ┆ foo_as_int ┆ col3_with_time      ┆ systolic_bp ┆ diastolic_bp ┆ interpolate │
@@ -97,6 +99,20 @@ shape: (2, 6)
 └─────┴────────────┴─────────────────────┴─────────────┴──────────────┴─────────────┘
 
 ```
+
+The concise string syntax now requires explicit column markers. Prefix a column name with `@` (for example `@col1`) or use the helper function `col("col1")` inside expressions. After parsing, call `validate_schema` to populate column types and raise an error if a referenced column is missing from your schema.
+
+### Migration from older releases
+
+Previous versions of dftly accepted an `input_schema` argument on parsing helpers and implicitly treated bare
+identifiers as column references. To migrate existing YAML:
+
+1. Update string expressions to use `@column_name` or `col("column_name")` wherever a column should be
+   referenced.
+2. Call :func:`validate_schema` on the parsed tree with your schema mapping instead of passing
+   `input_schema=` to :func:`from_yaml` or :func:`parse`.
+3. Dictionary-based column declarations (for example ``{column: name}``) continue to work and do not require
+   the `@` prefix.
 
 You can also use a more direct, expansive form rather than the concise string forms:
 
@@ -156,7 +172,9 @@ You can also use a more direct, expansive form rather than the concise string fo
 ...         col1:
 ...           column: {name: col1, type: int}
 ... """
->>> df.select(**map_to_polars(from_yaml(yaml_text, input_schema=input_schema)))
+>>> ops = from_yaml(yaml_text)
+>>> validate_schema(ops, schema)
+>>> df.select(**map_to_polars(ops))
 shape: (2, 6)
 ┌─────┬────────────┬─────────────────────┬─────────────┬──────────────┬─────────────┐
 │ sum ┆ foo_as_int ┆ col3_with_time      ┆ systolic_bp ┆ diastolic_bp ┆ interpolate │
@@ -193,16 +211,16 @@ shape: (2, 8)
 │ null ┆ 4    ┆ false ┆ false ┆ true  ┆ 2024-01-02 ┆ bar456 ┆ 2024-01-02 │
 └──────┴──────┴───────┴───────┴───────┴────────────┴────────┴────────────┘
 >>> spec = """
-... add: col1 + col2
+... add: @col1 + @col2
 ... coalesce:
-...   - col1
-...   - col2
-... conditional: col1 if flag else col2
-... in_set: col1 in {1, 2}
-... in_range: col1 in (3, 4]
-... bool_ops: flag1 && !flag2
-... parse: dt as "%Y-%m-%d"
-... hashed: hash(col1)
+...   - "@col1"
+...   - "@col2"
+... conditional: @col1 if @flag else @col2
+... in_set: @col1 in {1, 2}
+... in_range: @col1 in (3, 4]
+... bool_ops: @flag1 && !@flag2
+... parse: @dt as "%Y-%m-%d"
+... hashed: hash(@col1)
 ... """
 >>> schema = {
 ...     "col1": "int",
@@ -214,7 +232,8 @@ shape: (2, 8)
 ...     "text": "str",
 ...     "dt": "str",
 ... }
->>> ops = from_yaml(spec, input_schema=schema)
+>>> ops = from_yaml(spec)
+>>> validate_schema(ops, schema)
 >>> df.select(**map_to_polars(ops))
 shape: (2, 8)
 ┌──────┬──────────┬─────────────┬────────┬──────────┬──────────┬────────────┬──────────────────────┐
@@ -250,10 +269,10 @@ columns using both symbolic and fully-resolved forms:
 ...     "time_limit": [time(12, 0, 0), time(12, 15, 0)],
 ... })
 >>> spec = """
-... gt: int_col > int_limit
-... ge: dt_col >= dt_limit
-... lt: date_col < date_limit
-... le: time_col <= time_limit
+... gt: @int_col > @int_limit
+... ge: @dt_col >= @dt_limit
+... lt: @date_col < @date_limit
+... le: @time_col <= @time_limit
 ... """
 >>> schema = {
 ...     "int_col": "int",
@@ -265,7 +284,8 @@ columns using both symbolic and fully-resolved forms:
 ...     "time_col": "time",
 ...     "time_limit": "time",
 ... }
->>> ops = from_yaml(spec, input_schema=schema)
+>>> ops = from_yaml(spec)
+>>> validate_schema(ops, schema)
 >>> df.select(**map_to_polars(ops))
 shape: (2, 4)
 ┌───────┬───────┬───────┬───────┐
@@ -578,11 +598,11 @@ All inputs are parsed as literals, and no further resolution happens.
 
 Subsequent recursive resolution calls will enable the `literal` context flag.
 
-##### `input_schema`
+##### Schema validation
 
-This is a map of available input column names to their initial types, which can dictate some aspects of the
-parsing behavior. If set to `null`, it is assumed to be unknown/unspecified. A `null` type value indicates
-that the column exists but has an unknown/unspecified type.
+After parsing you can call :func:`validate_schema` with a mapping of column names to their expected types. This
+helper confirms that every referenced column exists and populates missing type information on the resulting
+``Column`` nodes. Type strings may be ``None`` when you do not want to enforce a specific type.
 
 #### Obtaining a `literal`
 
@@ -619,48 +639,41 @@ e: {literal: foobar123}
 
 > [!NOTE]
 > The last example works here as the input is a `null` context (so it has no columns specified), and
-> `foobar123` is not an expression parseable input. Were you to specify in the `input_schema` context variable
-> containing `foobar123`, then the input would be parsed as a column reference instead.
+> `foobar123` is not an expression parseable input. Column references in string form require explicit syntax,
+> so bare identifiers remain literals unless wrapped in ``@``/``col()`` markers.
 
 > [!NOTE]
 > If the `literal` flag were true in context, then everything would just be parsed as a literal.
 
 #### Obtaining a `column`
 
-Columns can be obtained in one of two ways:
+Columns can be obtained in the following ways:
 
-1. (_Fully resolved_) If a fully-resolved column is specified.
-2. (_Dictionary short form)_ If the input is a dictionary with a single key `column` and a value that is a string, it is resolved into
-    a column form with the given `name` set and the `type` inferred from the `input_schema` if possible, or
-    left as `null` if not.
-3. (_String form_) If the input is a string that is a valid column name and not an expression input parse
-    target, then it is parsed as a column reference.
-
-> [!NOTE]
-> If a column is specified in string form, it must be present in the `input_schema` context --
-> therefore, in this setting, were you to specify its type, it would be included in the output. However, this
-> is not true for a column literal, which is assumed to be specified as intended (type included).
+1. (_Fully resolved_) Provide a fully-resolved column mapping with explicit ``name`` (and optional ``type``).
+2. (_Dictionary short form_) Use a dictionary with the single key ``column`` whose value is either a string
+   column name or a mapping containing ``name``/``type``.
+3. (_String form_) Use the explicit string syntax ``@name`` or ``col("name")`` inside expressions.
 
 For example:
 
-_Input_ (`input_schema: {'foobar123': null, 'bar': 'string'}` context):
+_Input_:
 
 ```yaml
-a: {column: {name: bar}} # fully resolved column
-b: foobar123   # string column reference, which is a valid column name
-c: {column: bar} # Dictionary short-form
-d: {column: qux} # Dictionary short-form
-e: qux # Not a valid column name, so not parsed as a column
+a: {column: {name: bar, type: string}} # fully resolved column with an explicit type
+b: {column: bar}   # dictionary short-form without a type
+c: "@bar"         # string syntax using the @ prefix
+d: "col(\"baz\")"  # string syntax using the helper function
+e: qux            # bare identifier remains a literal
 ```
 
 _Output_:
 
 ```yaml
-a: {column: {name: bar, type: null}} # fully resolved column
-b: {column: {name: foobar123, type: null}} # string column reference, which is a valid column name
-c: {column: {name: bar, type: string}} # Dictionary short-form infers type
-d: {column: {name: qux, type: null}} # Dictionary short-form does not error if column is not in input_schema
-e: {literal: qux} # Not a valid column name, so not parsed as a column
+a: {column: {name: bar, type: string}}
+b: {column: {name: bar}}
+c: {column: {name: bar}}
+d: {column: {name: baz}}
+e: {literal: qux}
 ```
 
 #### Obtaining an `expression`
@@ -678,14 +691,14 @@ For example, this form allows for resolutions like:
 
 ```yaml
 a:
-  add: [col1, col2]
+  add: ["@col1", "@col2"]
 b:
   conditional:
     if:
       value_in_literal_set:
-        value: col1
+        value: "@col1"
         set: [1, 2, foo]
-    then: col2
+    then: "@col2"
     else: 43
 ```
 

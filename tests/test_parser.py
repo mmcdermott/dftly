@@ -1,11 +1,20 @@
 import pytest
-from dftly import Column, Expression, Literal, Parser, from_yaml
+from dftly import (
+    Column,
+    Expression,
+    Literal,
+    Parser,
+    SchemaValidationError,
+    from_yaml,
+    validate_schema,
+)
 from dftly.expressions import ExpressionRegistry
 
 
 def test_parse_addition():
-    text = "a: col1 + col2"
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    text = "a: @col1 + @col2"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int", "col2": "int"})
     expr = result["a"]
     assert isinstance(expr, Expression)
     assert expr.type == "ADD"
@@ -18,8 +27,9 @@ def test_parse_addition():
 
 
 def test_parse_function_call():
-    text = "a: add(col1, col2)"
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    text = "a: add(@col1, @col2)"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int", "col2": "int"})
     expr = result["a"]
     assert isinstance(expr, Expression)
     assert expr.type == "ADD"
@@ -29,9 +39,19 @@ def test_parse_function_call():
     assert isinstance(args[1], Column) and args[1].name == "col2"
 
 
+def test_parse_column_helper_function():
+    text = 'a: col("col1")'
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int"})
+    col = result["a"]
+    assert isinstance(col, Column)
+    assert col.name == "col1"
+
+
 def test_expression_registry_mapping_lookup():
-    parser = Parser(input_schema={"col1": "int"})
-    expr = ExpressionRegistry.create_from_mapping(parser, "hash", ["col1"])
+    parser = Parser()
+    expr = ExpressionRegistry.create_from_mapping(parser, "hash", ["@col1"])
+    validate_schema(expr, {"col1": "int"})
     assert expr is not None
     assert expr.type == "HASH_TO_INT"
     args = expr.arguments
@@ -40,10 +60,11 @@ def test_expression_registry_mapping_lookup():
 
 
 def test_expression_registry_tree_lookup():
-    parser = Parser(input_schema={"col1": "int"})
+    parser = Parser()
     expr = ExpressionRegistry.create_from_tree(
-        "func", parser, [], name="hash", args=["col1"]
+        "func", parser, [], name="hash", args=["@col1"]
     )
+    validate_schema(expr, {"col1": "int"})
     assert isinstance(expr, Expression)
     assert expr.type == "HASH_TO_INT"
     serialized = expr.to_dict()
@@ -59,8 +80,9 @@ def test_parse_literal_string():
 
 
 def test_parse_parentheses_and_string_literal():
-    text = 'a: (add(col1, "foo"))'
-    result = from_yaml(text, input_schema={"col1": "str"})
+    text = 'a: (add(@col1, "foo"))'
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "str"})
     expr = result["a"]
     assert isinstance(expr, Expression)
     assert expr.type == "ADD"
@@ -71,9 +93,9 @@ def test_parse_parentheses_and_string_literal():
 
 def test_parse_nested_parentheses_operations():
     text = """
-    a: (col1 + col2) - (col3 + col4)
-    b: flag1 and (flag2 or flag3)
-    c: not (flag1 or flag2)
+    a: (@col1 + @col2) - (@col3 + @col4)
+    b: @flag1 and (@flag2 or @flag3)
+    c: not (@flag1 or @flag2)
     """
     schema = {
         "col1": "int",
@@ -84,7 +106,8 @@ def test_parse_nested_parentheses_operations():
         "flag2": "bool",
         "flag3": "bool",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     a_expr = result["a"]
     assert isinstance(a_expr, Expression) and a_expr.type == "SUBTRACT"
@@ -109,11 +132,12 @@ def test_parse_string_interpolate_dict_and_string_forms():
       string_interpolate:
         pattern: "hello {col1}"
         inputs:
-          col1: col1
-    b: "hello {col1}"
+          col1: "@col1"
+    b: "hello {@col1}"
     """
     schema = {"col1": "int"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     a_expr = result["a"]
     assert isinstance(a_expr, Expression)
@@ -129,12 +153,13 @@ def test_parse_string_interpolate_dict_and_string_forms():
 
 def test_parse_subtract_and_cast_and_conditional():
     text = """
-    a: col1 - col2
-    b: col3 as float
-    c: col1 if flag else col2
+    a: @col1 - @col2
+    b: @col3 as float
+    c: @col1 if @flag else @col2
     """
     schema = {"col1": "int", "col2": "int", "col3": "str", "flag": "bool"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     sub = result["a"]
     assert isinstance(sub, Expression)
@@ -151,11 +176,12 @@ def test_parse_subtract_and_cast_and_conditional():
 
 def test_parse_resolve_timestamp_string_form():
     text = """
-    a: charttime @ "11:59:59 p.m."
-    b: birth_year @ "January 1, 12:00 a.m."
+    a: @charttime @ "11:59:59 p.m."
+    b: @birth_year @ "January 1, 12:00 a.m."
     """
     schema = {"charttime": "date", "birth_year": "int"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     a_expr = result["a"]
     assert isinstance(a_expr, Expression)
@@ -181,15 +207,16 @@ def test_parse_resolve_timestamp_string_form():
 
 def test_parse_boolean_and_coalesce():
     text = """
-    a: flag1 and flag2
-    b: flag1 or flag2
-    c: not flag1
+    a: @flag1 and @flag2
+    b: @flag1 or @flag2
+    c: not @flag1
     d:
-      - col1
-      - col2
+      - "@col1"
+      - "@col2"
     """
     schema = {"flag1": "bool", "flag2": "bool", "col1": "int", "col2": "int"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     and_expr = result["a"]
     assert isinstance(and_expr, Expression)
@@ -210,12 +237,13 @@ def test_parse_boolean_and_coalesce():
 
 def test_parse_boolean_symbol_forms():
     text = """
-    a: flag1 && flag2
-    b: flag1 || flag2
-    c: "!flag1"
+    a: @flag1 && @flag2
+    b: @flag1 || @flag2
+    c: "!@flag1"
     """
     schema = {"flag1": "bool", "flag2": "bool"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     and_expr = result["a"]
     assert isinstance(and_expr, Expression)
@@ -232,10 +260,10 @@ def test_parse_boolean_symbol_forms():
 
 def test_parse_comparison_string_forms():
     text = """
-    gt: col1 > col2
-    ge: ts >= cutoff
-    lt: col1 < 10
-    le: col2 <= col1
+    gt: @col1 > @col2
+    ge: @ts >= @cutoff
+    lt: @col1 < 10
+    le: @col2 <= @col1
     """
     schema = {
         "col1": "int",
@@ -243,7 +271,8 @@ def test_parse_comparison_string_forms():
         "ts": "datetime",
         "cutoff": "datetime",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     gt_expr = result["gt"]
     assert isinstance(gt_expr, Expression) and gt_expr.type == "GREATER_THAN"
@@ -271,20 +300,20 @@ def test_parse_comparison_short_forms():
     text = """
     gt_expr:
       gt:
-        left: col1
+        left: "@col1"
         right: 5
     ge_expr:
       ge:
-        left: ts
-        right: cutoff
+        left: "@ts"
+        right: "@cutoff"
     lt_expr:
       lt:
-        - col2
-        - col1
+        - "@col2"
+        - "@col1"
     le_expr:
       less_or_equal:
-        left: col1
-        right: col2
+        left: "@col1"
+        right: "@col2"
     """
     schema = {
         "col1": "int",
@@ -292,7 +321,8 @@ def test_parse_comparison_short_forms():
         "ts": "datetime",
         "cutoff": "datetime",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     gt_expr = result["gt_expr"]
     assert isinstance(gt_expr, Expression) and gt_expr.type == "GREATER_THAN"
@@ -322,16 +352,17 @@ def test_parse_value_in_set_and_range():
     text = """
     a:
       value_in_literal_set:
-        value: col1
+        value: "@col1"
         set: [1, 2]
     b:
       value_in_range:
-        value: col1
+        value: "@col1"
         min: 0
         max: 10
     """
     schema = {"col1": "int"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     in_set = result["a"]
     assert isinstance(in_set, Expression)
@@ -344,10 +375,12 @@ def test_parse_value_in_set_and_range():
 
 def test_parse_in_operator_string_forms():
     text = """
-    a: col1 in {1, 2}
-    b: col1 in (0, 2]
+    a: @col1 in {1, 2}
+    b: @col1 in (0, 2]
     """
-    result = from_yaml(text, input_schema={"col1": "int"})
+    schema = {"col1": "int"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     in_set = result["a"]
     assert isinstance(in_set, Expression)
@@ -380,7 +413,8 @@ def test_parse_fully_resolved_forms():
           - {literal: 1}
     """
     schema = {"col1": "int"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     lit = result["a"]
     assert isinstance(lit, Literal)
@@ -420,14 +454,15 @@ def test_parse_regex_dict_and_string_forms():
     a:
       regex_extract:
         regex: '(\\d+)'
-        input: col1
+        input: "@col1"
         group: 1
-    b: extract (\\d+) from col1
-    c: match foo against col2
-    d: not match foo against col2
+    b: extract (\\d+) from @col1
+    c: match foo against @col2
+    d: not match foo against @col2
     """
     schema = {"col1": "str", "col2": "str"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     a_expr = result["a"]
     assert isinstance(a_expr, Expression) and a_expr.type == "REGEX"
@@ -450,25 +485,26 @@ def test_parse_parse_with_format_string_forms():
     text = """
     a:
       parse_with_format_string:
-        input: dt
+        input: "@dt"
         output_type: datetime
         format: '%Y-%m-%d %H:%M:%S'
     b:
       parse:
-        input: dt
+        input: "@dt"
         output_type: datetime
         format: '%Y-%m-%d %H:%M:%S'
     c:
       parse_with_format_string:
-        input: dt
+        input: "@dt"
         datetime_format: '%Y-%m-%d %H:%M:%S'
     d:
       dt:
         datetime_format: '%Y-%m-%d %H:%M:%S'
-    e: "dt as '%Y-%m-%d'"
+    e: "@dt as '%Y-%m-%d'"
     """
     schema = {"dt": "str"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     for key in ["a", "b", "c", "d", "e"]:
         expr = result[key]
@@ -486,22 +522,23 @@ def test_parse_numeric_and_duration_formats():
     text = """
     a:
       parse_with_format_string:
-        input: num
+        input: "@num"
         numeric_format: '%d'
     b:
       num:
         numeric_format: '%d'
     c:
       parse_with_format_string:
-        input: dur
+        input: "@dur"
         duration_format: '%H:%M:%S'
     d:
       dur:
         duration_format: '%H:%M:%S'
-    e: "dur as '%H:%M:%S'"
+    e: "@dur as '%H:%M:%S'"
     """
     schema = {"num": "str", "dur": "str"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     for key in ["a", "b", "c", "d", "e"]:
         expr = result[key]
@@ -519,23 +556,23 @@ def test_parse_extended_numeric_and_duration_formats():
     text = """
     a:
       parse_with_format_string:
-        input: hours
+        input: "@hours"
         duration_format: '%H hours'
     b:
       parse_with_format_string:
-        input: comma_num
+        input: "@comma_num"
         numeric_format: '%,d'
     c:
       parse_with_format_string:
-        input: underscore_num
+        input: "@underscore_num"
         numeric_format: '%d'
     d:
       parse_with_format_string:
-        input: rel
+        input: "@rel"
         duration_format: '%m mo %dd'
-    e: "hours as '%H hours'"
-    f: "comma_num as '%,d'"
-    g: "underscore_num as '%d'"
+    e: "@hours as '%H hours'"
+    f: "@comma_num as '%,d'"
+    g: "@underscore_num as '%d'"
     """
     schema = {
         "hours": "str",
@@ -543,7 +580,8 @@ def test_parse_extended_numeric_and_duration_formats():
         "underscore_num": "str",
         "rel": "str",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     for key in "abcdefg":
         expr = result[key]
@@ -561,16 +599,17 @@ def test_parse_hash_to_int_and_hash_forms():
     text = """
     a:
       hash_to_int:
-        input: col1
+        input: "@col1"
         algorithm: md5
     b:
       hash:
-        input: col1
-    c: hash_to_int(col1)
-    d: hash(col1)
+        input: "@col1"
+    c: hash_to_int(@col1)
+    d: hash(@col1)
     """
     schema = {"col1": "str"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     for key in "abcd":
         expr = result[key]
@@ -594,18 +633,47 @@ def test_parse_non_mapping_raises_type_error():
 
 
 def test_invalid_chained_expression_raises_error():
-    text = "a: col1 + col2 AS %m mo %d d"
+    text = "a: @col1 + @col2 AS %m mo %d d"
     with pytest.raises(ValueError):
-        from_yaml(text, input_schema={"col1": "str", "col2": "str"})
+        from_yaml(text)
+
+
+def test_validate_schema_missing_column():
+    text = "a: @missing"
+    parsed = from_yaml(text)
+    with pytest.raises(SchemaValidationError):
+        validate_schema(parsed, {"col1": "int"})
+
+
+def test_validate_schema_populates_types():
+    text = "a: @col1"
+    parsed = from_yaml(text)
+    schema = {"col1": "int"}
+    validate_schema(parsed, schema)
+    col = parsed["a"]
+    assert isinstance(col, Column)
+    assert col.type == "int"
+
+
+def test_validate_schema_type_mismatch():
+    text = """
+    a:
+      column:
+        name: col1
+        type: float
+    """
+    parsed = from_yaml(text)
+    with pytest.raises(SchemaValidationError):
+        validate_schema(parsed, {"col1": "int"})
 
 
 def test_parse_operator_precedence():
     text = """
-    a: col1 + col2 + col3
-    b: col1 + col2 - col3
-    c: flag1 and flag2 or flag3
-    d: flag1 or flag2 and flag3
-    e: not flag1 and flag2
+    a: @col1 + @col2 + @col3
+    b: @col1 + @col2 - @col3
+    c: @flag1 and @flag2 or @flag3
+    d: @flag1 or @flag2 and @flag3
+    e: not @flag1 and @flag2
     """
     schema = {
         "col1": "int",
@@ -615,7 +683,8 @@ def test_parse_operator_precedence():
         "flag2": "bool",
         "flag3": "bool",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     a_expr = result["a"]
     assert isinstance(a_expr, Expression) and a_expr.type == "ADD"

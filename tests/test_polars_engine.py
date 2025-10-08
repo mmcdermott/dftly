@@ -1,12 +1,13 @@
 import polars as pl
 
-from dftly import from_yaml
+from dftly import from_yaml, validate_schema
 from dftly.polars import to_polars
 
 
 def test_polars_addition():
-    text = "a: col1 + col2"
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    text = "a: @col1 + @col2"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
 
     df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
@@ -15,8 +16,9 @@ def test_polars_addition():
 
 
 def test_polars_function_call():
-    text = "a: add(col1, col2)"
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    text = "a: add(@col1, @col2)"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
 
     df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
@@ -25,8 +27,9 @@ def test_polars_function_call():
 
 
 def test_polars_datetime_plus_duration():
-    text = "a: dt + dur"
-    result = from_yaml(text, input_schema={"dt": "datetime", "dur": "duration"})
+    text = "a: @dt + @dur"
+    result = from_yaml(text)
+    validate_schema(result, {"dt": "datetime", "dur": "duration"})
     expr = to_polars(result["a"])
 
     from datetime import datetime, timedelta
@@ -46,8 +49,9 @@ def test_polars_datetime_plus_duration():
 
 
 def test_polars_subtract():
-    text = "a: col1 - col2"
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int"})
+    text = "a: @col1 - @col2"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
 
     df = pl.DataFrame({"col1": [5, 10], "col2": [3, 4]})
@@ -56,8 +60,9 @@ def test_polars_subtract():
 
 
 def test_polars_type_cast():
-    text = "a: col1 as float"
-    result = from_yaml(text, input_schema={"col1": "int"})
+    text = "a: @col1 as float"
+    result = from_yaml(text)
+    validate_schema(result, {"col1": "int"})
     expr = to_polars(result["a"])
 
     df = pl.DataFrame({"col1": [1, 2]})
@@ -66,9 +71,10 @@ def test_polars_type_cast():
 
 
 def test_polars_conditional():
-    text = "a: col1 if flag else col2"
+    text = "a: @col1 if @flag else @col2"
     schema = {"col1": "int", "col2": "int", "flag": "bool"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     expr = to_polars(result["a"])
 
     df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4], "flag": [True, False]})
@@ -78,10 +84,11 @@ def test_polars_conditional():
 
 def test_polars_resolve_timestamp():
     text = """
-    a: charttime @ "11:59:59 p.m."
+    a: @charttime @ "11:59:59 p.m."
     """
     schema = {"charttime": "date"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     expr = to_polars(result["a"])
 
     from datetime import date
@@ -109,7 +116,8 @@ def test_polars_resolve_timestamp_with_parsed_time_expression():
                 format: {literal: AUTO}
     """
     schema = {"charttime": "date"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     expr = to_polars(result["a"])
 
     from datetime import date
@@ -146,18 +154,18 @@ def test_polars_parse_clock_time_aliases():
 
 def test_polars_boolean_and_coalesce_and_membership():
     text = """
-    a: flag1 and flag2
-    b: not flag1
+    a: @flag1 and @flag2
+    b: not @flag1
     c:
-      - col1
-      - col2
+      - "@col1"
+      - "@col2"
     d:
       value_in_literal_set:
-        value: col1
+        value: "@col1"
         set: [1, 2]
     e:
       value_in_range:
-        value: col1
+        value: "@col1"
         min: 0
         max: 2
     """
@@ -167,7 +175,8 @@ def test_polars_boolean_and_coalesce_and_membership():
         "col1": "int",
         "col2": "int",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame(
         {
             "flag1": [True, False],
@@ -192,12 +201,13 @@ def test_polars_boolean_and_coalesce_and_membership():
 
 def test_polars_boolean_symbol_forms():
     text = """
-    a: flag1 && flag2
-    b: flag1 || flag2
-    c: "!flag1"
+    a: @flag1 && @flag2
+    b: @flag1 || @flag2
+    c: "!@flag1"
     """
     schema = {"flag1": "bool", "flag2": "bool"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"flag1": [True, False], "flag2": [True, True]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -211,10 +221,10 @@ def test_polars_boolean_symbol_forms():
 
 def test_polars_comparison_operations():
     text = """
-    gt: int_col > int_limit
-    ge: dt_col >= dt_limit
-    lt: date_col < date_limit
-    le: time_col <= time_limit
+    gt: @int_col > @int_limit
+    ge: @dt_col >= @dt_limit
+    lt: @date_col < @date_limit
+    le: @time_col <= @time_limit
     """
     schema = {
         "int_col": "int",
@@ -226,7 +236,8 @@ def test_polars_comparison_operations():
         "time_col": "time",
         "time_limit": "time",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
 
     from datetime import date, datetime, time
 
@@ -264,9 +275,9 @@ def test_polars_comparison_operations():
 
 def test_polars_nested_parentheses_operations():
     text = """
-    a: (col1 + col2) - (col3 + col4)
-    b: flag1 and (flag2 or flag3)
-    c: not (flag1 or flag2)
+    a: (@col1 + @col2) - (@col3 + @col4)
+    b: @flag1 and (@flag2 or @flag3)
+    c: not (@flag1 or @flag2)
     """
     schema = {
         "col1": "int",
@@ -277,7 +288,8 @@ def test_polars_nested_parentheses_operations():
         "flag2": "bool",
         "flag3": "bool",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame(
         {
             "col1": [1, 2],
@@ -301,10 +313,12 @@ def test_polars_nested_parentheses_operations():
 
 def test_polars_in_operator_string_forms():
     text = """
-    a: col1 in {1, 3}
-    b: col1 in (0, 2]
+    a: @col1 in {1, 3}
+    b: @col1 in (0, 2]
     """
-    result = from_yaml(text, input_schema={"col1": "int"})
+    schema = {"col1": "int"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"col1": [1, 2, 3]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -318,21 +332,23 @@ def test_polars_value_in_range_boundaries():
     text = """
     a:
       value_in_range:
-        value: col1
+        value: "@col1"
         min: 0
         max: 2
         min_inclusive: false
         max_inclusive: false
     b:
       value_in_range:
-        value: col1
+        value: "@col1"
         min: 1
     c:
       value_in_range:
-        value: col1
+        value: "@col1"
         max: 2
     """
-    result = from_yaml(text, input_schema={"col1": "int"})
+    schema = {"col1": "int"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     expr_a = to_polars(result["a"])
     expr_b = to_polars(result["b"])
     expr_c = to_polars(result["c"])
@@ -359,10 +375,12 @@ def test_polars_string_interpolate():
       string_interpolate:
         pattern: "hello {col1}!"
         inputs:
-          col1: col1
-    b: "hey {col1}!"
+          col1: "@col1"
+    b: "hey {@col1}!"
     """
-    result = from_yaml(text, input_schema={"col1": "int"})
+    schema = {"col1": "int"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"col1": [1, 2]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -374,11 +392,13 @@ def test_polars_string_interpolate():
 
 def test_polars_regex_operations():
     text = """
-    a: extract (\\d+) from col1
-    b: match foo against col2
-    c: not match foo against col2
+    a: extract (\\d+) from @col1
+    b: match foo against @col2
+    c: not match foo against @col2
     """
-    result = from_yaml(text, input_schema={"col1": "str", "col2": "str"})
+    schema = {"col1": "str", "col2": "str"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"col1": ["abc123", "def456"], "col2": ["foo", "bar"]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -394,12 +414,14 @@ def test_polars_parse_with_format_string_forms():
     text = """
     a:
       parse_with_format_string:
-        input: dt
+        input: "@dt"
         output_type: datetime
         format: '%Y-%m-%d %H:%M:%S'
-    b: "dt as '%Y-%m-%d %H:%M:%S'"
+    b: "@dt as '%Y-%m-%d %H:%M:%S'"
     """
-    result = from_yaml(text, input_schema={"dt": "str"})
+    schema = {"dt": "str"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"dt": ["2024-01-01 12:00:00", "2024-02-01 13:30:00"]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -413,16 +435,18 @@ def test_polars_parse_numeric_and_duration_forms():
     text = """
     a:
       parse_with_format_string:
-        input: num
+        input: "@num"
         numeric_format: '%d'
-    b: "num as '%d'"
+    b: "@num as '%d'"
     c:
       parse_with_format_string:
-        input: dur
+        input: "@dur"
         duration_format: '%H:%M:%S'
-    d: "dur as '%H:%M:%S'"
+    d: "@dur as '%H:%M:%S'"
     """
-    result = from_yaml(text, input_schema={"num": "str", "dur": "str"})
+    schema = {"num": "str", "dur": "str"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"num": ["1", "2"], "dur": ["01:00:00", "02:30:00"]})
     out = df.with_columns(
         a=to_polars(result["a"]),
@@ -441,23 +465,23 @@ def test_polars_parse_extended_numeric_and_duration_forms():
     text = """
     a:
       parse_with_format_string:
-        input: hours
+        input: "@hours"
         duration_format: '%H hours'
     b:
       parse_with_format_string:
-        input: comma_num
+        input: "@comma_num"
         numeric_format: '%,d'
     c:
       parse_with_format_string:
-        input: underscore_num
+        input: "@underscore_num"
         numeric_format: '%d'
     d:
       parse_with_format_string:
-        input: rel
+        input: "@rel"
         duration_format: '%m mo %dd'
-    e: "hours as '%H hours'"
-    f: "comma_num as '%,d'"
-    g: "underscore_num as '%d'"
+    e: "@hours as '%H hours'"
+    f: "@comma_num as '%,d'"
+    g: "@underscore_num as '%d'"
     """
     schema = {
         "hours": "str",
@@ -465,7 +489,8 @@ def test_polars_parse_extended_numeric_and_duration_forms():
         "underscore_num": "str",
         "rel": "str",
     }
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame(
         {
             "hours": ["3 hours"],
@@ -494,14 +519,16 @@ def _md5_int(val: str) -> int:
 
 def test_polars_hash_to_int_forms():
     text = """
-    a: hash_to_int(col1)
+    a: hash_to_int(@col1)
     b:
       hash_to_int:
-        input: col1
+        input: "@col1"
         algorithm: md5
-    c: hash(col1)
+    c: hash(@col1)
     """
-    result = from_yaml(text, input_schema={"col1": "str"})
+    schema = {"col1": "str"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"col1": ["foo", "bar"]})
 
     out = df.with_columns(
@@ -520,10 +547,12 @@ def test_polars_hash_to_int_forms():
 
 def test_polars_operator_precedence_arithmetic():
     text = """
-    a: col1 + col2 + col3
-    b: col1 + col2 - col3
+    a: @col1 + @col2 + @col3
+    b: @col1 + @col2 - @col3
     """
-    result = from_yaml(text, input_schema={"col1": "int", "col2": "int", "col3": "int"})
+    schema = {"col1": "int", "col2": "int", "col3": "int"}
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4], "col3": [5, 6]})
     out = df.with_columns(a=to_polars(result["a"]), b=to_polars(result["b"]))
     assert out.get_column("a").to_list() == [9, 12]
@@ -532,12 +561,13 @@ def test_polars_operator_precedence_arithmetic():
 
 def test_polars_operator_precedence_boolean():
     text = """
-    a: flag1 and flag2 or flag3
-    b: flag1 or flag2 and flag3
-    c: not flag1 and flag2
+    a: @flag1 and @flag2 or @flag3
+    b: @flag1 or @flag2 and @flag3
+    c: not @flag1 and @flag2
     """
     schema = {"flag1": "bool", "flag2": "bool", "flag3": "bool"}
-    result = from_yaml(text, input_schema=schema)
+    result = from_yaml(text)
+    validate_schema(result, schema)
     df = pl.DataFrame(
         {
             "flag1": [True, False, False],
