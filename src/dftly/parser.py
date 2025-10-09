@@ -1,4 +1,5 @@
 from .nodes.base import NodeBase
+import inspect
 from typing import Any
 from collections import defaultdict
 
@@ -26,16 +27,45 @@ class Parser:
         A NodeBase subclass instance parsed from the input value.
 
     Examples:
-        >>> import polars as pl
         >>> from dftly.nodes.arithmetic import Add, Multiply, Subtract, Literal
-        >>> nodes = {'add': Add, 'multiply': Multiply, 'subtract': Subtract, 'literal': Literal}
-        >>> parser = Parser(nodes)
-        >>> value = {'add': [1, {'multiply': [2, 3]}]}
-        >>> node = parser(value)
+        >>> parser = Parser({'add': Add, 'multiply': Multiply, 'subtract': Subtract, 'literal': Literal})
+        >>> node = parser({'add': [1, {'multiply': [2, 3]}]})
         >>> node
         Add(Literal(1), Multiply(Literal(2), Literal(3)))
         >>> pl.select(node.polars_expr).item()
         7
+        >>> node = parser({'subtract': [10, {'add': [2, 3, 4]}]})
+        >>> node
+        Subtract(Literal(10), Add(Literal(2), Literal(3), Literal(4)))
+        >>> pl.select(node.polars_expr).item()
+        1
+
+    If we try to parse a node that depends on something we don't know about, we get an error:
+
+        >>> node = parser({'fake': [2, 3]})
+        Traceback (most recent call last):
+            ...
+        ValueError: No matching node found for value: {'fake': [2, 3]}.
+
+    This also happens within nested nodes, reporting the node that failed:
+
+        >>> node = parser({'add': [1, {'fake': [2, 3]}]})
+        Traceback (most recent call last):
+            ...
+        ValueError: No matching node found for value: {'add': [1, {'fake': [2, 3]}]}.
+        Errors from attempted matches:
+        - add: No matching node found for value: {'fake': [2, 3]}.
+
+    If we pass invalid nodes or duplicate keys, we get errors:
+
+        >>> parser = Parser({'add': Add, 'sum': "hi there"})
+        Traceback (most recent call last):
+            ...
+        TypeError: registered node sum is not a subclass of NodeBase; got hi there
+        >>> parser = Parser({'add': Add, 'sum': Add})
+        Traceback (most recent call last):
+            ...
+        ValueError: multiple nodes registered with key 'add': ['add', 'sum']
     """
 
     def __init__(self, registered_nodes: dict[str, NodeBase]):
@@ -44,7 +74,7 @@ class Parser:
         by_key = defaultdict(list)
 
         for name, node_cls in registered_nodes.items():
-            if not issubclass(node_cls, NodeBase):
+            if not (inspect.isclass(node_cls) and issubclass(node_cls, NodeBase)):
                 raise TypeError(
                     f"registered node {name} is not a subclass of NodeBase; got {node_cls}"
                 )
@@ -53,7 +83,7 @@ class Parser:
 
         for key, names in by_key.items():
             if len(names) > 1:
-                raise ValueError(f"multiple nodes registered with key {key}: {names}")
+                raise ValueError(f"multiple nodes registered with key '{key}': {names}")
 
     def _matching_nodes(self, value: Any) -> set[str]:
         matches = set()

@@ -503,12 +503,21 @@ class NestedArgsNode(NodeBase):
 
 
 class BinaryOp(NestedArgsNode, _BinaryOp):
-    """Base class for non-terminal binary operation nodes."""
+    """Base class for non-terminal binary operation nodes.
+
+    Requires that all arguments be NodeBase instances and that there be exactly two positional arguments.
+    """
 
 
 class UnaryOp(NestedArgsNode, _UnaryOp):
-    """Base class for non-terminal unary operation nodes."""
+    """Base class for non-terminal unary operation nodes.
+
+    Requires that all arguments be NodeBase instances and that there be exactly one positional argument.
+    """
 
 
 class ArgsOnlyFn(NestedArgsNode, _ArgsFn):
-    """Base class for non-terminal nodes that accept only positional arguments."""
+    """Base class for non-terminal nodes that accept only positional arguments.
+
+    Requires that all arguments be NodeBase instances and that there be only positional arguments.
+    """
