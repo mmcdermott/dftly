@@ -7,6 +7,8 @@ MINUS: "-"
 TIMES: "*"
 DIV: "/"
 AT: "@"
+EQ: "=="
+NE: "!="
 GE: ">="
 LE: "<="
 GT: ">"
@@ -39,7 +41,7 @@ AGAINST.2: /against/i
 
 ?expr: comparison
 
-?comparison: additive (GE|LE|GT|LT) additive   -> binary_expr
+?comparison: additive (NE|EQ|GE|LE|GT|LT) additive   -> binary_expr
            | additive
 
 ?additive: additive (PLUS|MINUS) multiplicative   -> binary_expr
@@ -56,7 +58,7 @@ AGAINST.2: /against/i
        | NAME
        | group
 
-group: "(" expr ")"
+?group: "(" expr ")"
 
-call_expr: NAME "(" [args] ")"   -> func
-args: expr ("," expr)*
+?call_expr: NAME "(" [args] ")"   -> func
+?args: expr ("," expr)*

@@ -1,4 +1,5 @@
 from .nodes.base import NodeBase
+from .nodes import NODES
 import inspect
 from typing import Any
 from collections import defaultdict
@@ -85,7 +86,7 @@ class Parser:
         ValueError: multiple nodes registered with key 'add': ['add', 'sum']
     """
 
-    def __init__(self, registered_nodes: dict[str, NodeBase]):
+    def __init__(self, registered_nodes: dict[str, NodeBase] = NODES):
         self.registered_nodes = registered_nodes
 
         by_key = defaultdict(list)

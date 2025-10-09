@@ -5,7 +5,7 @@ from typing import Any
 from importlib.resources import files
 from lark import Lark, Transformer
 
-from ..nodes import BINARY_OPS
+from ..nodes import BINARY_OPS, NODES
 
 
 GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
@@ -15,12 +15,18 @@ GRAMMAR = Lark(GRAMMAR_TEXT, parser="lalr")
 class DftlyGrammar(Transformer):
     """Transform parsed tokens into object form via a lark grammar.
 
-    This class allows for parsing string forms into object nodes.
+    This class allows for parsing string forms into object nodes. It should primarily be used not through a
+    constructed instance, but through the `parse_str` class method, as shown below.
 
     Examples:
-        >>> node = DftlyGrammar.parse_str("1 + 2 * 3")
-        >>> node
+        >>> DftlyGrammar.parse_str("1 + 2 * 3")
         {'add': [1, {'multiply': [2, 3]}]}
+        >>> DftlyGrammar.parse_str("1 / (2 + 3) > 0.1")
+        {'greater_than': [{'divide': [1, {'add': [2, 3]}]}, 0.1]}
+        >>> DftlyGrammar.parse_str("5 == 2 + 3")
+        {'equal': [5, {'add': [2, 3]}]}
+        >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
+        {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
     """
 
     @classmethod
@@ -45,3 +51,17 @@ class DftlyGrammar(Transformer):
             )
 
         return BINARY_OPS[op].from_lark([left, right])
+
+    def args(self, items: list[Any]) -> list[Any]:
+        return items
+
+    def func(self, items: list[Any]) -> dict:
+        func_name = items[0]
+        args = items[1]
+
+        if func_name not in NODES:
+            raise ValueError(
+                f"Unsupported function: {func_name}; allowed: {list(NODES)}"
+            )
+
+        return NODES[func_name].from_lark(args)
