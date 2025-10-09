@@ -5,7 +5,7 @@ from typing import Any
 from importlib.resources import files
 from lark import Lark, Transformer
 
-from ..nodes import BINARY_OPS, NODES, Column, Literal, StringInterpolate
+from ..nodes import BINARY_OPS, NODES, Column, StringInterpolate
 
 
 GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
@@ -40,8 +40,8 @@ class DftlyGrammar(Transformer):
 
     String interpolation is supported via f-strings:
 
-        >>> DftlyGrammar.parse_str("f'hello {name}'")
-        {'string_interpolate': [{'literal': 'hello {name}'}]}
+        >>> DftlyGrammar.parse_str("f'hello {@name}'")
+        {'string_interpolate': [{'literal': 'hello {}'}, '@name']}
     """
 
     @classmethod
@@ -97,4 +97,4 @@ class DftlyGrammar(Transformer):
     def format_string(self, items: list[Any]) -> dict:
         f, pattern = items
 
-        return StringInterpolate.from_lark([Literal.from_lark(pattern)])
+        return StringInterpolate.from_lark(pattern)

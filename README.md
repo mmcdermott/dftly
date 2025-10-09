@@ -66,7 +66,7 @@ with dftly, we can do this:
 ...     "sum": "@col1 + @col2",
 ...     "diff": "@col2 - @col1",
 ...     "compare": "@col1 > (@col2 - 3) * 3",
-...     "str_interp": 'f"value: {foo} {col1}"',
+...     "str_interp": 'f"value: {@foo} {@col1}"',
 ... }
 >>> from dftly import Parser
 >>> parser = Parser()
@@ -81,17 +81,5 @@ shape: (2, 4)
 │ 4   ┆ 2    ┆ true    ┆ value: 5 1 │
 │ 6   ┆ 2    ┆ false   ┆ value: 6 2 │
 └─────┴──────┴─────────┴────────────┘
-
-```
-
-Note that string interpolation is a simple interpolation; it cannot contain expressions inside the column
-references:
-
-```python
->>> str_interp = 'f"value: {col1 + col2}"',
->>> df.select(parser(str_interp).polars_expr)
-Traceback (most recent call last):
-    ...
-ValueError: No matching node found for value: ('f"value: {col1 + col2}"',).
 
 ```
