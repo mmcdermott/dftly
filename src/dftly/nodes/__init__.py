@@ -8,6 +8,7 @@ from .comparison import (
     GreaterThanOrEqual,
     LessThanOrEqual,
 )
+from .str import StringInterpolate
 
 __nodes = [
     Literal,
@@ -22,6 +23,7 @@ __nodes = [
     NotEqual,
     GreaterThanOrEqual,
     LessThanOrEqual,
+    StringInterpolate,
 ]
 
 NODES = {node.KEY: node for node in __nodes}

@@ -13,6 +13,7 @@ GE: ">="
 LE: "<="
 GT: ">"
 LT: "<"
+FORMAT_PFX: "f"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
@@ -53,10 +54,11 @@ AGAINST.2: /against/i
 ?unary: primary
 
 ?primary: call_expr
-       | (AT)NAME -> column
-       | NUMBER
-       | STRING
-       | group
+        | (AT)NAME -> column
+        | (FORMAT_PFX)STRING -> format_string
+        | NUMBER
+        | STRING
+        | group
 
 ?group: "(" expr ")"
 

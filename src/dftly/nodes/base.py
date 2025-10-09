@@ -264,7 +264,7 @@ class NodeBase(ABC):
 
     @classmethod
     @abstractmethod
-    def from_lark(cls, items: list[Any]) -> Any:
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
         """Must be implemented by subclasses to parse from lark."""
         raise NotImplementedError("Subclasses must implement from_lark")
 
@@ -303,7 +303,7 @@ class _ArgsFn(NodeBase):
         return self.__class__.pl_fn(*args)
 
     @classmethod
-    def from_lark(cls, items: list[Any]) -> "ArgsOnlyFn":
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
         """This helper returns a dictionary that will parse into this node from a set of parsed lark args."""
         return {cls.KEY: items}
 
