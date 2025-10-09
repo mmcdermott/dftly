@@ -12,7 +12,7 @@ from dftly.expressions import ExpressionRegistry
 
 
 def test_parse_addition():
-    text = "a: @col1 + @col2"
+    text = "a: '@col1 + @col2'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int", "col2": "int"})
     expr = result["a"]
@@ -27,7 +27,7 @@ def test_parse_addition():
 
 
 def test_parse_function_call():
-    text = "a: add(@col1, @col2)"
+    text = "a: 'add(@col1, @col2)'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int", "col2": "int"})
     expr = result["a"]
@@ -80,7 +80,7 @@ def test_parse_literal_string():
 
 
 def test_parse_parentheses_and_string_literal():
-    text = 'a: (add(@col1, "foo"))'
+    text = "a: '(add(@col1, \"foo\"))'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "str"})
     expr = result["a"]
@@ -93,9 +93,9 @@ def test_parse_parentheses_and_string_literal():
 
 def test_parse_nested_parentheses_operations():
     text = """
-    a: (@col1 + @col2) - (@col3 + @col4)
-    b: @flag1 and (@flag2 or @flag3)
-    c: not (@flag1 or @flag2)
+    a: '(@col1 + @col2) - (@col3 + @col4)'
+    b: '@flag1 and (@flag2 or @flag3)'
+    c: 'not (@flag1 or @flag2)'
     """
     schema = {
         "col1": "int",
@@ -153,9 +153,9 @@ def test_parse_string_interpolate_dict_and_string_forms():
 
 def test_parse_subtract_and_cast_and_conditional():
     text = """
-    a: @col1 - @col2
-    b: @col3 as float
-    c: @col1 if @flag else @col2
+    a: '@col1 - @col2'
+    b: '@col3 as float'
+    c: '@col1 if @flag else @col2'
     """
     schema = {"col1": "int", "col2": "int", "col3": "str", "flag": "bool"}
     result = from_yaml(text)
@@ -176,8 +176,8 @@ def test_parse_subtract_and_cast_and_conditional():
 
 def test_parse_resolve_timestamp_string_form():
     text = """
-    a: @charttime @ "11:59:59 p.m."
-    b: @birth_year @ "January 1, 12:00 a.m."
+    a: '@charttime @ "11:59:59 p.m."'
+    b: '@birth_year @ "January 1, 12:00 a.m."'
     """
     schema = {"charttime": "date", "birth_year": "int"}
     result = from_yaml(text)
@@ -207,9 +207,9 @@ def test_parse_resolve_timestamp_string_form():
 
 def test_parse_boolean_and_coalesce():
     text = """
-    a: @flag1 and @flag2
-    b: @flag1 or @flag2
-    c: not @flag1
+    a: '@flag1 and @flag2'
+    b: '@flag1 or @flag2'
+    c: 'not @flag1'
     d:
       - "@col1"
       - "@col2"
@@ -237,8 +237,8 @@ def test_parse_boolean_and_coalesce():
 
 def test_parse_boolean_symbol_forms():
     text = """
-    a: @flag1 && @flag2
-    b: @flag1 || @flag2
+    a: '@flag1 && @flag2'
+    b: '@flag1 || @flag2'
     c: "!@flag1"
     """
     schema = {"flag1": "bool", "flag2": "bool"}
@@ -260,10 +260,10 @@ def test_parse_boolean_symbol_forms():
 
 def test_parse_comparison_string_forms():
     text = """
-    gt: @col1 > @col2
-    ge: @ts >= @cutoff
-    lt: @col1 < 10
-    le: @col2 <= @col1
+    gt: '@col1 > @col2'
+    ge: '@ts >= @cutoff'
+    lt: '@col1 < 10'
+    le: '@col2 <= @col1'
     """
     schema = {
         "col1": "int",
@@ -375,8 +375,8 @@ def test_parse_value_in_set_and_range():
 
 def test_parse_in_operator_string_forms():
     text = """
-    a: @col1 in {1, 2}
-    b: @col1 in (0, 2]
+    a: '@col1 in {1, 2}'
+    b: '@col1 in (0, 2]'
     """
     schema = {"col1": "int"}
     result = from_yaml(text)
@@ -633,20 +633,20 @@ def test_parse_non_mapping_raises_type_error():
 
 
 def test_invalid_chained_expression_raises_error():
-    text = "a: @col1 + @col2 AS %m mo %d d"
+    text = "a: '@col1 + @col2 AS %m mo %d d'"
     with pytest.raises(ValueError):
         from_yaml(text)
 
 
 def test_validate_schema_missing_column():
-    text = "a: @missing"
+    text = "a: '@missing'"
     parsed = from_yaml(text)
     with pytest.raises(SchemaValidationError):
         validate_schema(parsed, {"col1": "int"})
 
 
 def test_validate_schema_populates_types():
-    text = "a: @col1"
+    text = "a: '@col1'"
     parsed = from_yaml(text)
     schema = {"col1": "int"}
     validate_schema(parsed, schema)
@@ -669,11 +669,11 @@ def test_validate_schema_type_mismatch():
 
 def test_parse_operator_precedence():
     text = """
-    a: @col1 + @col2 + @col3
-    b: @col1 + @col2 - @col3
-    c: @flag1 and @flag2 or @flag3
-    d: @flag1 or @flag2 and @flag3
-    e: not @flag1 and @flag2
+    a: '@col1 + @col2 + @col3'
+    b: '@col1 + @col2 - @col3'
+    c: '@flag1 and @flag2 or @flag3'
+    d: '@flag1 or @flag2 and @flag3'
+    e: 'not @flag1 and @flag2'
     """
     schema = {
         "col1": "int",

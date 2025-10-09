@@ -5,7 +5,7 @@ from dftly.polars import to_polars
 
 
 def test_polars_addition():
-    text = "a: @col1 + @col2"
+    text = "a: '@col1 + @col2'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
@@ -16,7 +16,7 @@ def test_polars_addition():
 
 
 def test_polars_function_call():
-    text = "a: add(@col1, @col2)"
+    text = "a: 'add(@col1, @col2)'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
@@ -27,7 +27,7 @@ def test_polars_function_call():
 
 
 def test_polars_datetime_plus_duration():
-    text = "a: @dt + @dur"
+    text = "a: '@dt + @dur'"
     result = from_yaml(text)
     validate_schema(result, {"dt": "datetime", "dur": "duration"})
     expr = to_polars(result["a"])
@@ -49,7 +49,7 @@ def test_polars_datetime_plus_duration():
 
 
 def test_polars_subtract():
-    text = "a: @col1 - @col2"
+    text = "a: '@col1 - @col2'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int", "col2": "int"})
     expr = to_polars(result["a"])
@@ -60,7 +60,7 @@ def test_polars_subtract():
 
 
 def test_polars_type_cast():
-    text = "a: @col1 as float"
+    text = "a: '@col1 as float'"
     result = from_yaml(text)
     validate_schema(result, {"col1": "int"})
     expr = to_polars(result["a"])
@@ -71,7 +71,7 @@ def test_polars_type_cast():
 
 
 def test_polars_conditional():
-    text = "a: @col1 if @flag else @col2"
+    text = "a: '@col1 if @flag else @col2'"
     schema = {"col1": "int", "col2": "int", "flag": "bool"}
     result = from_yaml(text)
     validate_schema(result, schema)
@@ -84,7 +84,7 @@ def test_polars_conditional():
 
 def test_polars_resolve_timestamp():
     text = """
-    a: @charttime @ "11:59:59 p.m."
+    a: '@charttime @ "11:59:59 p.m."'
     """
     schema = {"charttime": "date"}
     result = from_yaml(text)
@@ -154,8 +154,8 @@ def test_polars_parse_clock_time_aliases():
 
 def test_polars_boolean_and_coalesce_and_membership():
     text = """
-    a: @flag1 and @flag2
-    b: not @flag1
+    a: '@flag1 and @flag2'
+    b: 'not @flag1'
     c:
       - "@col1"
       - "@col2"
@@ -201,8 +201,8 @@ def test_polars_boolean_and_coalesce_and_membership():
 
 def test_polars_boolean_symbol_forms():
     text = """
-    a: @flag1 && @flag2
-    b: @flag1 || @flag2
+    a: '@flag1 && @flag2'
+    b: '@flag1 || @flag2'
     c: "!@flag1"
     """
     schema = {"flag1": "bool", "flag2": "bool"}
@@ -221,10 +221,10 @@ def test_polars_boolean_symbol_forms():
 
 def test_polars_comparison_operations():
     text = """
-    gt: @int_col > @int_limit
-    ge: @dt_col >= @dt_limit
-    lt: @date_col < @date_limit
-    le: @time_col <= @time_limit
+    gt: '@int_col > @int_limit'
+    ge: '@dt_col >= @dt_limit'
+    lt: '@date_col < @date_limit'
+    le: '@time_col <= @time_limit'
     """
     schema = {
         "int_col": "int",
@@ -275,9 +275,9 @@ def test_polars_comparison_operations():
 
 def test_polars_nested_parentheses_operations():
     text = """
-    a: (@col1 + @col2) - (@col3 + @col4)
-    b: @flag1 and (@flag2 or @flag3)
-    c: not (@flag1 or @flag2)
+    a: '(@col1 + @col2) - (@col3 + @col4)'
+    b: '@flag1 and (@flag2 or @flag3)'
+    c: 'not (@flag1 or @flag2)'
     """
     schema = {
         "col1": "int",
@@ -313,8 +313,8 @@ def test_polars_nested_parentheses_operations():
 
 def test_polars_in_operator_string_forms():
     text = """
-    a: @col1 in {1, 3}
-    b: @col1 in (0, 2]
+    a: '@col1 in {1, 3}'
+    b: '@col1 in (0, 2]'
     """
     schema = {"col1": "int"}
     result = from_yaml(text)
@@ -519,7 +519,7 @@ def _md5_int(val: str) -> int:
 
 def test_polars_hash_to_int_forms():
     text = """
-    a: hash_to_int(@col1)
+    a: 'hash_to_int(@col1)'
     b:
       hash_to_int:
         input: "@col1"
@@ -547,8 +547,8 @@ def test_polars_hash_to_int_forms():
 
 def test_polars_operator_precedence_arithmetic():
     text = """
-    a: @col1 + @col2 + @col3
-    b: @col1 + @col2 - @col3
+    a: '@col1 + @col2 + @col3'
+    b: '@col1 + @col2 - @col3'
     """
     schema = {"col1": "int", "col2": "int", "col3": "int"}
     result = from_yaml(text)
@@ -561,9 +561,9 @@ def test_polars_operator_precedence_arithmetic():
 
 def test_polars_operator_precedence_boolean():
     text = """
-    a: @flag1 and @flag2 or @flag3
-    b: @flag1 or @flag2 and @flag3
-    c: not @flag1 and @flag2
+    a: '@flag1 and @flag2 or @flag3'
+    b: '@flag1 or @flag2 and @flag3'
+    c: 'not @flag1 and @flag2'
     """
     schema = {"flag1": "bool", "flag2": "bool", "flag3": "bool"}
     result = from_yaml(text)

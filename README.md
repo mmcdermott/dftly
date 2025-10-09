@@ -75,11 +75,11 @@ from the `bp` column. We can express this in a YAML file as follows:
 
 ```python
 >>> yaml_text = """
-... sum: @col1 + @col2
-... foo_as_int: @foo as "%i"
-... col3_with_time: @col3 @ "11:59:59 p.m."
-... systolic_bp: extract group 1 of (\\d+)/(\\d+) from @bp
-... diastolic_bp: extract group 2 of (\\d+)/(\\d+) from @bp
+... sum: '@col1 + @col2'
+... foo_as_int: '@foo as "%i"'
+... col3_with_time: '@col3 @ "11:59:59 p.m."'
+... systolic_bp: 'extract group 1 of (\\d+)/(\\d+) from @bp'
+... diastolic_bp: 'extract group 2 of (\\d+)/(\\d+) from @bp'
 ... interpolate: "val {@col1}"
 ... """
 >>> schema={"col1": "int", "col2": "int", "foo": "str", "col3": "date", "bp": "str"}
@@ -108,7 +108,7 @@ Previous versions of dftly accepted an `input_schema` argument on parsing helper
 identifiers as column references. To migrate existing YAML:
 
 1. Update string expressions to use `@column_name` or `col("column_name")` wherever a column should be
-   referenced.
+   referenced. When writing YAML, wrap the expression values in quotes so the `@` prefix is preserved.
 2. Call :func:`validate_schema` on the parsed tree with your schema mapping instead of passing
    `input_schema=` to :func:`from_yaml` or :func:`parse`.
 3. Dictionary-based column declarations (for example ``{column: name}``) continue to work and do not require
@@ -211,16 +211,16 @@ shape: (2, 8)
 │ null ┆ 4    ┆ false ┆ false ┆ true  ┆ 2024-01-02 ┆ bar456 ┆ 2024-01-02 │
 └──────┴──────┴───────┴───────┴───────┴────────────┴────────┴────────────┘
 >>> spec = """
-... add: @col1 + @col2
+... add: '@col1 + @col2'
 ... coalesce:
 ...   - "@col1"
 ...   - "@col2"
-... conditional: @col1 if @flag else @col2
-... in_set: @col1 in {1, 2}
-... in_range: @col1 in (3, 4]
-... bool_ops: @flag1 && !@flag2
-... parse: @dt as "%Y-%m-%d"
-... hashed: hash(@col1)
+... conditional: '@col1 if @flag else @col2'
+... in_set: '@col1 in {1, 2}'
+... in_range: '@col1 in (3, 4]'
+... bool_ops: '@flag1 && !@flag2'
+... parse: '@dt as "%Y-%m-%d"'
+... hashed: 'hash(@col1)'
 ... """
 >>> schema = {
 ...     "col1": "int",
@@ -269,10 +269,10 @@ columns using both symbolic and fully-resolved forms:
 ...     "time_limit": [time(12, 0, 0), time(12, 15, 0)],
 ... })
 >>> spec = """
-... gt: @int_col > @int_limit
-... ge: @dt_col >= @dt_limit
-... lt: @date_col < @date_limit
-... le: @time_col <= @time_limit
+... gt: '@int_col > @int_limit'
+... ge: '@dt_col >= @dt_limit'
+... lt: '@date_col < @date_limit'
+... le: '@time_col <= @time_limit'
 ... """
 >>> schema = {
 ...     "int_col": "int",

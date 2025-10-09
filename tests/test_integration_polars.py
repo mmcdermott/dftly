@@ -17,7 +17,7 @@ a:
   expression:
     type: ADD
     arguments:
-      - col1
+      - {column: col1}
       - {literal: 2}
       - {column: col2}
 b:
@@ -38,7 +38,7 @@ d:
     value: "@col1"
     min: 0
     max: 10
-e: @chartdate @ "11:59:59 p.m."
+e: '@chartdate @ "11:59:59 p.m."'
 """
 
 SCHEMA = {
