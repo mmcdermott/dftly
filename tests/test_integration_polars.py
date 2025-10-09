@@ -1,7 +1,7 @@
 import io
 import polars as pl
 from datetime import datetime
-from dftly import from_yaml
+from dftly import from_yaml, validate_schema
 from dftly.polars import map_to_polars
 
 
@@ -17,28 +17,28 @@ a:
   expression:
     type: ADD
     arguments:
-      - col1
+      - {column: col1}
       - {literal: 2}
       - {column: col2}
 b:
-  - col3
+  - "@col3"
   - {literal: 3}
 c:
   conditional:
-    if: flag
+    if: "@flag"
     then:
       expression:
         type: SUBTRACT
         arguments:
-          - col1
+          - "@col1"
           - 1
-    else: col2
+    else: "@col2"
 d:
   value_in_range:
-    value: col1
+    value: "@col1"
     min: 0
     max: 10
-e: chartdate @ "11:59:59 p.m."
+e: '@chartdate @ "11:59:59 p.m."'
 """
 
 SCHEMA = {
@@ -55,7 +55,8 @@ def test_polars_integration_complex_csv_yaml():
         io.StringIO(CSV_TEXT),
         schema_overrides={"flag": pl.Boolean, "chartdate": pl.Date},
     )
-    result = from_yaml(YAML_TEXT, input_schema=SCHEMA)
+    result = from_yaml(YAML_TEXT)
+    validate_schema(result, SCHEMA)
     exprs = map_to_polars(result)
     out = df.with_columns(**exprs)
 

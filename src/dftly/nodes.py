@@ -93,21 +93,19 @@ class Column(NodeBase):
     def _validate_map(
         cls,
         value: Any,
-        *,
-        input_schema: Optional[Mapping[str, Optional[str]]] = None,
     ) -> Mapping[str, Any]:
         if isinstance(value, str):
-            typ = None if input_schema is None else input_schema.get(value)
-            return {"name": value, "type": typ}
+            return {"name": value}
         if isinstance(value, Mapping):
             cls._validate_keys(
                 value, {"name", "type"}, label="column", required={"name"}
             )
             name = value["name"]
             typ = value.get("type")
-            if typ is None and input_schema is not None:
-                typ = input_schema.get(name)
-            return {"name": name, "type": typ}
+            data = {"name": name}
+            if typ is not None:
+                data["type"] = typ
+            return data
         raise TypeError("column value must be a string or mapping")
 
 

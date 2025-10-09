@@ -344,10 +344,7 @@ class ParseWithFormatStringExpression(ExpressionNode):
             raise TypeError("PARSE_WITH_FORMAT_STRING arguments must be a mapping")
         normalized = cls._normalize(expr_type)
         if normalized not in {cls.type, *(cls._normalize(a) for a in cls.aliases)}:
-            parsed_args.setdefault(
-                "input",
-                Column(expr_type, parser.input_schema.get(expr_type)),
-            )
+            parsed_args.setdefault("input", Column(expr_type))
         cls._post_process_arguments(parsed_args)
         return Expression(cls.type, parsed_args)
 

@@ -2,6 +2,7 @@
 
 from .nodes import Column, Expression, Literal
 from .parser import Parser, from_yaml, parse
+from .validation import SchemaValidationError, validate_schema
 
 __all__ = [
     "Column",
@@ -10,4 +11,6 @@ __all__ = [
     "Parser",
     "parse",
     "from_yaml",
+    "SchemaValidationError",
+    "validate_schema",
 ]

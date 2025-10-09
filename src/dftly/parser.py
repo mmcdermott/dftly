@@ -39,10 +39,7 @@ DATE_TIME_RE = re.compile(
 class Parser:
     """Parse simplified YAML-like structures into dftly nodes."""
 
-    def __init__(
-        self, input_schema: Optional[Mapping[str, Optional[str]]] = None
-    ) -> None:
-        self.input_schema = dict(input_schema or {})
+    def __init__(self) -> None:
         grammar_text = files(__package__).joinpath("grammar.lark").read_text()
         self._lark = Lark(grammar_text, parser="lalr")
         self._transformer = DftlyTransformer(self)
@@ -71,7 +68,7 @@ class Parser:
             return Literal.from_mapping(value)
 
         if "column" in value:
-            return Column.from_mapping(value, input_schema=self.input_schema)
+            return Column.from_mapping(value)
 
         if "expression" in value:
             return Expression.from_mapping(value, parser=self)
@@ -137,8 +134,6 @@ class Parser:
         if isinstance(value, (Expression, Column, Literal)):
             return value
         if isinstance(value, str):
-            if value in self.input_schema:
-                return Column(value, self.input_schema.get(value))
             return Literal(value)
         raise TypeError(f"cannot convert {type(value).__name__} to node")
 
@@ -276,6 +271,17 @@ class DftlyTransformer(Transformer):
     def func(self, items: list[Any]) -> Expression:  # type: ignore[override]
         name = items[0]
         args = items[1] if len(items) > 1 else []
+        if str(name).lower() == "col":
+            if len(args) != 1:
+                raise ValueError("col() requires exactly one argument")
+            target = args[0]
+            if isinstance(target, Literal):
+                value = target.value
+            else:
+                value = target
+            if not isinstance(value, str):
+                raise TypeError("col() requires a string literal argument")
+            return Column(value)
         result = ExpressionRegistry.create_from_tree(
             "func", self.parser, [], name=name, args=args
         )
@@ -283,6 +289,10 @@ class DftlyTransformer(Transformer):
             return result
         parsed_args = [self.parser._as_node(a) for a in args]
         return Expression(str(name).upper(), parsed_args)
+
+    def column_ref(self, items: list[Any]) -> Column:  # type: ignore[override]
+        (_, name) = items
+        return Column(str(name))
 
     def literal_set(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
         if not items:
@@ -412,16 +422,16 @@ class DftlyTransformer(Transformer):
 
 
 def parse(
-    data: Mapping[str, Any], input_schema: Optional[Mapping[str, Optional[str]]] = None
+    data: Mapping[str, Any],
 ) -> Dict[str, Any]:
     """Parse simplified data into fully resolved form."""
 
-    parser = Parser(input_schema)
+    parser = Parser()
     return parser.parse(data)
 
 
 def from_yaml(
-    yaml_text: str, input_schema: Optional[Mapping[str, Optional[str]]] = None
+    yaml_text: str,
 ) -> Dict[str, Any]:
     """Parse from a YAML string."""
 
@@ -430,4 +440,4 @@ def from_yaml(
     data = yaml.safe_load(yaml_text) or {}
     if not isinstance(data, Mapping):
         raise TypeError("YAML input must produce a mapping")
-    return parse(data, input_schema)
+    return parse(data)

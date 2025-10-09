@@ -69,11 +69,16 @@ primary: call_expr
        | regex_extract
        | regex_match
        | NAME AS STRING  -> parse_as_format
+       | column_ref AS STRING  -> parse_as_format
        | NAME AS NAME   -> cast
+       | column_ref AS NAME   -> cast
        | NUMBER         -> number
        | STRING         -> string
        | NAME           -> name
+       | column_ref
        | group
+
+column_ref: AT NAME
 
 group: "(" expr ")" -> paren_expr
 
