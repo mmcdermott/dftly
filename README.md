@@ -108,11 +108,11 @@ Previous versions of dftly accepted an `input_schema` argument on parsing helper
 identifiers as column references. To migrate existing YAML:
 
 1. Update string expressions to use `@column_name` or `col("column_name")` wherever a column should be
-   referenced. When writing YAML, wrap the expression values in quotes so the `@` prefix is preserved.
+    referenced. When writing YAML, wrap the expression values in quotes so the `@` prefix is preserved.
 2. Call :func:`validate_schema` on the parsed tree with your schema mapping instead of passing
-   `input_schema=` to :func:`from_yaml` or :func:`parse`.
-3. Dictionary-based column declarations (for example ``{column: name}``) continue to work and do not require
-   the `@` prefix.
+    `input_schema=` to :func:`from_yaml` or :func:`parse`.
+3. Dictionary-based column declarations (for example `{column: name}`) continue to work and do not require
+    the `@` prefix.
 
 You can also use a more direct, expansive form rather than the concise string forms:
 
@@ -602,7 +602,7 @@ Subsequent recursive resolution calls will enable the `literal` context flag.
 
 After parsing you can call :func:`validate_schema` with a mapping of column names to their expected types. This
 helper confirms that every referenced column exists and populates missing type information on the resulting
-``Column`` nodes. Type strings may be ``None`` when you do not want to enforce a specific type.
+`Column` nodes. Type strings may be `None` when you do not want to enforce a specific type.
 
 #### Obtaining a `literal`
 
@@ -640,7 +640,7 @@ e: {literal: foobar123}
 > [!NOTE]
 > The last example works here as the input is a `null` context (so it has no columns specified), and
 > `foobar123` is not an expression parseable input. Column references in string form require explicit syntax,
-> so bare identifiers remain literals unless wrapped in ``@``/``col()`` markers.
+> so bare identifiers remain literals unless wrapped in `@`/`col()` markers.
 
 > [!NOTE]
 > If the `literal` flag were true in context, then everything would just be parsed as a literal.
@@ -649,10 +649,10 @@ e: {literal: foobar123}
 
 Columns can be obtained in the following ways:
 
-1. (_Fully resolved_) Provide a fully-resolved column mapping with explicit ``name`` (and optional ``type``).
-2. (_Dictionary short form_) Use a dictionary with the single key ``column`` whose value is either a string
-   column name or a mapping containing ``name``/``type``.
-3. (_String form_) Use the explicit string syntax ``@name`` or ``col("name")`` inside expressions.
+1. (_Fully resolved_) Provide a fully-resolved column mapping with explicit `name` (and optional `type`).
+2. (_Dictionary short form_) Use a dictionary with the single key `column` whose value is either a string
+    column name or a mapping containing `name`/`type`.
+3. (_String form_) Use the explicit string syntax `@name` or `col("name")` inside expressions.
 
 For example:
 
@@ -661,8 +661,8 @@ _Input_:
 ```yaml
 a: {column: {name: bar, type: string}} # fully resolved column with an explicit type
 b: {column: bar}   # dictionary short-form without a type
-c: "@bar"         # string syntax using the @ prefix
-d: "col(\"baz\")"  # string syntax using the helper function
+c: '@bar'         # string syntax using the @ prefix
+d: col("baz")      # string syntax using the helper function
 e: qux            # bare identifier remains a literal
 ```
 
@@ -691,14 +691,14 @@ For example, this form allows for resolutions like:
 
 ```yaml
 a:
-  add: ["@col1", "@col2"]
+  add: ['@col1', '@col2']
 b:
   conditional:
     if:
       value_in_literal_set:
-        value: "@col1"
+        value: '@col1'
         set: [1, 2, foo]
-    then: "@col2"
+    then: '@col2'
     else: 43
 ```
 

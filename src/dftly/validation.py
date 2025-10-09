@@ -49,7 +49,9 @@ def _validate_node(node: Any, schema: Mapping[str, Any], path: Sequence[str]) ->
         return
 
 
-def _validate_column(column: Column, schema: Mapping[str, Any], path: Sequence[str]) -> None:
+def _validate_column(
+    column: Column, schema: Mapping[str, Any], path: Sequence[str]
+) -> None:
     if column.name not in schema:
         location = _format_path(path)
         raise SchemaValidationError(
