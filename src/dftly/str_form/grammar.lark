@@ -53,9 +53,9 @@ AGAINST.2: /against/i
 ?unary: primary
 
 ?primary: call_expr
+       | (AT)NAME -> column
        | NUMBER
        | STRING
-       | NAME
        | group
 
 ?group: "(" expr ")"

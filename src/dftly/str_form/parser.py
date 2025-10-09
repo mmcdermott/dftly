@@ -5,7 +5,7 @@ from typing import Any
 from importlib.resources import files
 from lark import Lark, Transformer
 
-from ..nodes import BINARY_OPS, NODES
+from ..nodes import BINARY_OPS, NODES, Column
 
 
 GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
@@ -27,6 +27,16 @@ class DftlyGrammar(Transformer):
         {'equal': [5, {'add': [2, 3]}]}
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
         {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
+
+    You can also express columns using the `"@column_name"` syntax:
+
+        >>> DftlyGrammar.parse_str("@a + @b * 3")
+        {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, 3]}]}
+
+    Strings will be parsed into string nodes:
+
+        >>> DftlyGrammar.parse_str("'hello' + ' ' + 'world'")
+        {'add': [{'add': ['hello', ' ']}, 'world']}
     """
 
     @classmethod
@@ -41,6 +51,19 @@ class DftlyGrammar(Transformer):
             return float(token)
         else:
             return int(token)
+
+    def STRING(self, token: str) -> str:
+        """Remove the surrounding quotes from a string token."""
+        return str(token[1:-1])
+
+    def NAME(self, token: str) -> str:
+        """Return the name token as a string."""
+        return str(token)
+
+    def column(self, items: list[str]) -> dict:
+        """Resolve the "@column_name" syntax into a column node."""
+        at_sign, column_name = items
+        return Column.from_lark(column_name)
 
     def binary_expr(self, items: list[dict | str]) -> dict:
         left, op, right = items

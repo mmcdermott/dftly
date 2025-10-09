@@ -1,4 +1,4 @@
-from .base import BinaryOp, UnaryOp
+from .base import BinaryOp, UnaryOp, Literal, Column
 from .arithmetic import Add, Subtract, Multiply, Divide
 from .comparison import (
     GreaterThan,
@@ -10,6 +10,8 @@ from .comparison import (
 )
 
 __nodes = [
+    Literal,
+    Column,
     Add,
     Subtract,
     Multiply,
