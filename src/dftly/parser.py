@@ -40,6 +40,14 @@ class Parser:
         >>> pl.select(node.polars_expr).item()
         1
 
+    The parser can also handle node class objects in the value directly:
+
+        >>> node = parser({'add': [1, Literal(2)]})
+        >>> node
+        Add(Literal(1), Literal(2))
+        >>> pl.select(node.polars_expr).item()
+        3
+
     If we try to parse a node that depends on something we don't know about, we get an error:
 
         >>> node = parser({'fake': [2, 3]})
