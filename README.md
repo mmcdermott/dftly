@@ -90,5 +90,8 @@ references:
 ```python
 >>> str_interp = 'f"value: {col1 + col2}"',
 >>> df.select(parser(str_interp).polars_expr)
+Traceback (most recent call last):
+    ...
+ValueError: No matching node found for value: ('f"value: {col1 + col2}"',).
 
 ```

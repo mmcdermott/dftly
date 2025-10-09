@@ -7,6 +7,7 @@ class StringInterpolate(ArgsOnlyFn):
     """This non-terminal node represents an f-string interpolation.
 
     Example:
+        >>> from dftly.nodes import Literal
         >>> df = pl.DataFrame({"name": ["Alice", "Bob"]})
         >>> df
         shape: (2, 1)
