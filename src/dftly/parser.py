@@ -50,13 +50,32 @@ class Parser:
         >>> pl.select(node.polars_expr).item()
         3
 
-    Strings route to the string parser via the `DftlyGrammar` class, but can also be used:
+    Strings route to the string parser via the `DftlyGrammar` class, though this class does resolve quoted
+    strings into string literals:
 
         >>> node = parser("1 + 2 * 3")
         >>> node
         Add(Literal(1), Multiply(Literal(2), Literal(3)))
         >>> pl.select(node.polars_expr).item()
         7
+        >>> node = parser("'foo'")
+        >>> node
+        Literal('foo')
+        >>> pl.select(node.polars_expr).item()
+        'foo'
+
+    The parser parses nodes recursively:
+
+        >>> node = parser({'add': ['"foo"', '"bar"']})
+        >>> node
+        Add(Literal('foo'), Literal('bar'))
+        >>> pl.select(node.polars_expr).item()
+        'foobar'
+        >>> node = parser({'add': ["1 * 2", "2 - 3"]})
+        >>> node
+        Add(Multiply(Literal(1), Literal(2)), Subtract(Literal(2), Literal(3)))
+        >>> pl.select(node.polars_expr).item()
+        1
 
     If we try to parse a node that depends on something we don't know about, we get an error:
 
