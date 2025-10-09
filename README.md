@@ -83,3 +83,12 @@ shape: (2, 4)
 └─────┴──────┴─────────┴────────────┘
 
 ```
+
+Note that string interpolation is a simple interpolation; it cannot contain expressions inside the column
+references:
+
+```python
+>>> str_interp = 'f"value: {col1 + col2}"',
+>>> df.select(parser(str_interp).polars_expr)
+
+```
