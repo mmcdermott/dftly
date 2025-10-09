@@ -4,6 +4,8 @@ STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
 
 PLUS: "+"
 MINUS: "-"
+TIMES: "*"
+DIV: "/"
 AT: "@"
 GE: ">="
 LE: "<="
@@ -33,63 +35,28 @@ FROM.2: /from/i
 MATCH.2: /match/i
 AGAINST.2: /against/i
 
-start: expr
+?start: expr
 
-?expr: conditional
+?expr: comparison
 
-conditional: bool_expr IF bool_expr ELSE expr   -> ifexpr
-           | bool_expr
-
-?bool_expr: bool_expr (OR|OR_SYM) bool_term   -> or_expr
-          | bool_term
-
-?bool_term: bool_term (AND|AND_SYM) bool_factor   -> and_expr
-          | bool_factor
-
-?bool_factor: (NOT|NOT_SYM) bool_factor       -> not_expr
-            | membership
-
-?membership: additive IN set_literal        -> value_in_set
-           | additive IN range_literal      -> value_in_range
-           | comparison
-
-?comparison: additive (GE|LE|GT|LT) additive   -> compare_expr
+?comparison: additive (GE|LE|GT|LT) additive   -> binary_expr
            | additive
 
-?additive: additive PLUS multiplicative
-         | additive MINUS multiplicative
+?additive: additive (PLUS|MINUS) multiplicative   -> binary_expr
          | multiplicative
 
-?multiplicative: multiplicative AT unary  -> resolve_ts
+?multiplicative: multiplicative (TIMES|DIV) unary  -> binary_expr
                | unary
 
 ?unary: primary
 
-primary: call_expr
-       | regex_extract
-       | regex_match
-       | NAME AS STRING  -> parse_as_format
-       | NAME AS NAME   -> cast
-       | NUMBER         -> number
-       | STRING         -> string
-       | NAME           -> name
+?primary: call_expr
+       | NUMBER
+       | STRING
+       | NAME
        | group
 
-group: "(" expr ")" -> paren_expr
+group: "(" expr ")"
 
 call_expr: NAME "(" [args] ")"   -> func
-args: expr ("," expr)*   -> arg_list
-
-set_literal: "{" [args] "}"   -> literal_set
-
-range_literal: "[" expr "," expr "]"   -> range_inc
-             | "[" expr "," expr ")"   -> range_ie
-             | "(" expr "," expr "]"   -> range_ei
-             | "(" expr "," expr ")"   -> range_exc
-
-regex_extract: EXTRACT (GROUP NUMBER OF)? regex FROM expr
-regex_match: MATCH regex AGAINST expr -> regex_match
-           | NOT_MATCH regex AGAINST expr -> regex_match
-regex: REGEX_PAREN_TOKEN
-     | REGEX_TOKEN
-     | STRING
+args: expr ("," expr)*

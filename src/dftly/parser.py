@@ -2,6 +2,7 @@ from .nodes.base import NodeBase
 import inspect
 from typing import Any
 from collections import defaultdict
+from .str_form.parser import DftlyGrammar
 
 
 class Parser:
@@ -47,6 +48,14 @@ class Parser:
         Add(Literal(1), Literal(2))
         >>> pl.select(node.polars_expr).item()
         3
+
+    Strings route to the string parser via the `DftlyGrammar` class, but can also be used:
+
+        >>> node = parser("1 + 2 * 3")
+        >>> node
+        Add(Literal(1), Multiply(Literal(2), Literal(3)))
+        >>> pl.select(node.polars_expr).item()
+        7
 
     If we try to parse a node that depends on something we don't know about, we get an error:
 
@@ -103,6 +112,9 @@ class Parser:
     def __call__(self, value: Any):
         outputs = {}
         errors = {}
+
+        if isinstance(value, str):
+            value = DftlyGrammar.parse_str(value)
 
         for node in self._matching_nodes(value):
             try:

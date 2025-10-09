@@ -19,6 +19,7 @@ class GreaterThan(BinaryOp):
     """
 
     KEY = "greater_than"
+    SYM = ">"
     pl_fn = pl.Expr.gt
 
 
@@ -33,6 +34,7 @@ class LessThan(BinaryOp):
     """
 
     KEY = "less_than"
+    SYM = "<"
     pl_fn = pl.Expr.lt
 
 
@@ -47,6 +49,7 @@ class Equal(BinaryOp):
     """
 
     KEY = "equal"
+    SYM = "=="
     pl_fn = pl.Expr.eq
 
 
@@ -61,6 +64,7 @@ class NotEqual(BinaryOp):
     """
 
     KEY = "not_equal"
+    SYM = "!="
     pl_fn = pl.Expr.ne
 
 
@@ -77,6 +81,7 @@ class GreaterThanOrEqual(BinaryOp):
     """
 
     KEY = "greater_than_or_equal"
+    SYM = ">="
     pl_fn = pl.Expr.ge
 
 
@@ -93,4 +98,5 @@ class LessThanOrEqual(BinaryOp):
     """
 
     KEY = "less_than_or_equal"
+    SYM = "<="
     pl_fn = pl.Expr.le

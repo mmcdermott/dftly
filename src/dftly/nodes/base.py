@@ -77,6 +77,7 @@ class NodeBase(ABC):
             ...    KEY = "mynode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> MyNode.args_from_value({"mynode": {}})
             ((), {})
             >>> MyNode.args_from_value({"expression": {"type": "mynode"}})
@@ -130,10 +131,12 @@ class NodeBase(ABC):
             ...    KEY = "mynode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> class OtherNode(NodeBase):
             ...    KEY = "othernode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> MyNode._is_class_form(MyNode())
             True
             >>> MyNode._is_class_form(OtherNode())
@@ -162,6 +165,7 @@ class NodeBase(ABC):
             ...    KEY = "mynode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> MyNode._is_resolved_form({"expression": {"type": "mynode"}})
             True
             >>> MyNode._is_resolved_form({"expression": {"type": "mynode"}, "extra": 1})
@@ -198,6 +202,7 @@ class NodeBase(ABC):
             ...    KEY = "mynode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> MyNode._is_short_form({"mynode": {}})
             True
             >>> MyNode._is_short_form({"mynode": "foobar"})
@@ -222,6 +227,7 @@ class NodeBase(ABC):
             ...    KEY = "mynode"
             ...    def __post_init__(self): pass
             ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
             >>> MyNode.matches({"mynode": {}})
             True
             >>> MyNode.matches({"expression": {"type": "mynode"}})
@@ -256,6 +262,12 @@ class NodeBase(ABC):
         all_args = ", ".join(filter(None, [args_str, kwargs_str]))
         return f"{self.__class__.__name__}({all_args})"
 
+    @classmethod
+    @abstractmethod
+    def from_lark(cls, items: list[Any]) -> Any:
+        """Must be implemented by subclasses to parse from lark."""
+        raise NotImplementedError("Subclasses must implement from_lark")
+
 
 # Intermediate base shared validators
 class _ArgsFn(NodeBase):
@@ -289,6 +301,11 @@ class _ArgsFn(NodeBase):
     def polars_expr(self) -> pl.Expr:
         args = [a.polars_expr if isinstance(a, NodeBase) else a for a in self.args]
         return self.__class__.pl_fn(*args)
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> "ArgsOnlyFn":
+        """This helper returns a dictionary that will parse into this node from a set of parsed lark args."""
+        return {cls.KEY: items}
 
 
 class _UnaryOp(_ArgsFn):
@@ -476,6 +493,7 @@ class NestedArgsNode(NodeBase):
         ...    KEY = "mynestedargsnode"
         ...    @property
         ...    def polars_expr(self): return pl.lit(42)
+        ...    def from_lark(cls, items: list[Any]) -> Any: pass
         >>> MyNestedArgsNode(Column("foo"), Literal(42), extra=Column("bar"))
         MyNestedArgsNode(Column('foo'), Literal(42), extra=Column('bar'))
         >>> MyNestedArgsNode(1, 2)
@@ -508,12 +526,16 @@ class BinaryOp(NestedArgsNode, _BinaryOp):
     Requires that all arguments be NodeBase instances and that there be exactly two positional arguments.
     """
 
+    SYM: ClassVar[str]
+
 
 class UnaryOp(NestedArgsNode, _UnaryOp):
     """Base class for non-terminal unary operation nodes.
 
     Requires that all arguments be NodeBase instances and that there be exactly one positional argument.
     """
+
+    SYM: ClassVar[str]
 
 
 class ArgsOnlyFn(NestedArgsNode, _ArgsFn):

@@ -17,6 +17,7 @@ class Add(ArgsOnlyFn):
     """
 
     KEY = "add"
+    SYM = "+"
     pl_fn = pl.sum_horizontal
 
 
@@ -29,6 +30,7 @@ class Subtract(BinaryOp):
     """
 
     KEY = "subtract"
+    SYM = "-"
     pl_fn = pl.Expr.sub
 
 
@@ -41,6 +43,7 @@ class Multiply(ArgsOnlyFn):
     """
 
     KEY = "multiply"
+    SYM = "*"
 
     @classmethod
     def pl_fn(cls, *args: pl.Expr) -> pl.Expr:
@@ -59,6 +62,7 @@ class Divide(BinaryOp):
     """
 
     KEY = "divide"
+    SYM = "/"
     pl_fn = pl.Expr.truediv
 
 
