@@ -1,9 +1,17 @@
 from .nodes.base import NodeBase
+from pathlib import Path
+import polars as pl
 from .nodes import NODES
 import inspect
 from typing import Any
 from collections import defaultdict
 from .str_form.parser import DftlyGrammar
+import yaml
+
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 
 
 class Parser:
@@ -163,3 +171,42 @@ class Parser:
         if len(outputs) > 1:
             raise ValueError(f"multiple matching nodes for {node}: {list(outputs)}")
         return next(iter(outputs.values()))
+
+    @classmethod
+    def to_polars(cls, yaml_file: str | Path) -> dict[str, pl.Expr]:
+        """Parse a YAML file into a dictionary of Polars expressions."""
+        parser = cls()
+
+        if isinstance(yaml_file, str):
+            try:
+                if Path(yaml_file).is_file:
+                    yaml_file = Path(yaml_file).read_text()
+            except Exception:
+                pass
+        elif isinstance(yaml_file, Path):
+            if yaml_file.is_file():
+                yaml_file = yaml_file.read_text()
+            else:
+                raise FileNotFoundError(f"YAML file not found: {yaml_file}")
+        else:
+            raise TypeError(
+                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
+            )
+
+        if not isinstance(yaml_file, str):
+            raise TypeError(
+                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
+            )
+
+        yaml_content = yaml.load(yaml_file, Loader=Loader)
+
+        if not isinstance(yaml_content, dict):
+            raise ValueError(
+                f"YAML content must be a dictionary at the top level; got {type(yaml_content)}"
+            )
+
+        exprs = {}
+        for name, value in yaml_content.items():
+            exprs[name] = parser(value).polars_expr.alias(name)
+
+        return exprs

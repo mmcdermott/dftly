@@ -59,7 +59,42 @@ shape: (2, 5)
 
 ```
 
-with dftly, we can do this:
+with dftly, we can write a yaml file like this:
+
+```python
+>>> ops = r"""
+... sum: "@col1 + @col2"
+... diff: "@col2 - @col1"
+... compare: "@col1 > (@col2 - 3) * 3"
+... str_interp: 'f"value: {@foo} {@col1}"'
+... max: "max(@col1, @col2)"
+... conditional: '"big" if @col1 > 1 else "small"'
+... sys_bp: "extract group 1 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+... dia_bp: "extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+... """
+
+```
+
+Then use it to transform the dataframe like so:
+
+```python
+>>> from dftly import Parser
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 8)
+┌─────┬──────┬─────────┬────────────┬─────┬─────────────┬────────┬────────┐
+│ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional ┆ sys_bp ┆ dia_bp │
+│ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         ┆ ---    ┆ ---    │
+│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         ┆ str    ┆ str    │
+╞═════╪══════╪═════════╪════════════╪═════╪═════════════╪════════╪════════╡
+│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       ┆ 120    ┆ 80     │
+│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
+└─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
+
+```
+
+Internally, this simply parses the yaml file into a mapping, then treats the mapping as a map from desired
+output column name to input column expression, parsing each expression via the dftly grammar. In particular,
+the below is equivalent to the above:
 
 ```python
 >>> ops = {
@@ -86,4 +121,91 @@ shape: (2, 8)
 │ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
 └─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 
+```
+
+The way dftly works is that strings are parsed into dictionary forms representing the specified operations,
+and an AST over those nodes is built up once they are resolved into dictionary form. This means you can also
+specify the operations in a fully explicit manner using these dictionary views for a more expansive, but
+precise syntax:
+
+```python
+>>> ops = r"""
+... sum: # "@col1 + @col2"
+...   add:
+...     - column: col1
+...     - column: col2
+... diff: # "@col2 - @col1"
+...   subtract:
+...     - column: col2
+...     - column: col1
+... compare: # "@col1 > (@col2 - 3) * 3"
+...   greater_than:
+...     - column: col1
+...     - multiply:
+...         - subtract:
+...             - column: col2
+...             - literal: 3
+...         - literal: 3
+... str_interp: # 'f"value: {@foo} {@col1}"'
+...   string_interpolate:
+...     - literal: "value: {} {}"
+...     - column: foo
+...     - column: col1
+... max: # "max(@col1, @col2)"
+...   max:
+...     - column: col1
+...     - column: col2
+... conditional: # '"big" if @col1 > 1 else "small"'
+...   conditional:
+...     when:
+...       greater_than:
+...         - column: col1
+...         - literal: 1
+...     then:
+...       literal: "big"
+...     otherwise:
+...       literal: "small"
+... sys_bp: # "extract group 1 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+...   conditional:
+...     when:
+...       regex_match:
+...         pattern:
+...           literal: (\d+)\/(\d+)
+...         source:
+...           column: bp
+...     then:
+...       regex_extract:
+...         group_index:
+...           literal: 1
+...         pattern:
+...           literal: (\d+)\/(\d+)
+...         source:
+...           column: bp
+... dia_bp: # "extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+...   conditional:
+...     when:
+...       regex_match:
+...         pattern:
+...           literal: (\d+)\/(\d+)
+...         source:
+...           column: bp
+...     then:
+...       regex_extract:
+...         group_index:
+...           literal: 2
+...         pattern:
+...           literal: (\d+)\/(\d+)
+...         source:
+...           column: bp
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 8)
+┌─────┬──────┬─────────┬────────────┬─────┬─────────────┬────────┬────────┐
+│ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional ┆ sys_bp ┆ dia_bp │
+│ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         ┆ ---    ┆ ---    │
+│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         ┆ str    ┆ str    │
+╞═════╪══════╪═════════╪════════════╪═════╪═════════════╪════════╪════════╡
+│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       ┆ 120    ┆ 80     │
+│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
+└─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 ```
