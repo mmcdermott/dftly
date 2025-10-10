@@ -8,7 +8,7 @@ from .comparison import (
     GreaterThanOrEqual,
     LessThanOrEqual,
 )
-from .str import StringInterpolate, RegexExtract, RegexMatch
+from .str import StringInterpolate, RegexExtract, RegexMatch, Strptime
 from .conditional import Conditional
 from .types import Cast
 
@@ -33,6 +33,7 @@ __nodes = [
     RegexMatch,
     Conditional,
     Cast,
+    Strptime,
 ]
 
 NODES = {node.KEY: node for node in __nodes}

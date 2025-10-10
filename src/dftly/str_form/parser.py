@@ -16,6 +16,7 @@ from ..nodes import (
     Literal,
     RegexExtract,
     RegexMatch,
+    Strptime,
 )
 
 
@@ -80,6 +81,13 @@ class DftlyGrammar(Transformer):
                                     {'literal': '01-'}]},
                            {'literal': '01'}]},
                   {'literal': 'date'}]}
+
+    The `... as ...` syntax can also be used to indicate string parsing, which currently only supports
+    datetime parsing via strptime:
+
+        >>> DftlyGrammar.parse_str("'2023-01-01 12:34:56' as '%Y-%m-%d %H:%M:%S'")
+        {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'},
+                      'source': {'literal': '2023-01-01 12:34:56'}}}
     """
 
     @classmethod
@@ -182,3 +190,6 @@ class DftlyGrammar(Transformer):
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    def strptime(self, items: list[Any]) -> Any:
+        return Strptime.from_lark(items)

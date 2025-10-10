@@ -44,6 +44,7 @@ AGAINST.2: /against/i
 ?expr: global_cast
 
 ?global_cast: conditional AS NAME   -> cast_expr
+            | conditional AS STRING -> strptime
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional_expr

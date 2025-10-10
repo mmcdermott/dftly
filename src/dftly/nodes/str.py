@@ -1,7 +1,8 @@
 from .base import ArgsOnlyFn, Literal, KwargsOnlyFn, NodeBase
-from typing import Any
+from typing import ClassVar, Any
 import polars as pl
 import string
+from .types import DATE_TIME_TYPES
 
 
 class StringInterpolate(ArgsOnlyFn):
@@ -258,3 +259,152 @@ class RegexMatch(KwargsOnlyFn):
         pattern, source = items
 
         return {cls.KEY: {"pattern": pattern, "source": source}}
+
+
+class Strptime(KwargsOnlyFn):
+    """This node parses a string into a datetime using a specified format.
+
+    This node only accepts keyword arguments, and requires "format" and "source" keys. The "format" key is the
+    datetime format string, and the "source" key is the target node to parse. The result will be either a
+    date, time, or datetime type, depending on the format string.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> date = Strptime(format=Literal("%Y-%m-%d"), source=Literal("2023-01-01"))
+        >>> pl.select(date.polars_expr).item()
+        datetime.date(2023, 1, 1)
+        >>> time = Strptime(format=Literal("%H:%M:%S"), source=Literal("12:34:56"))
+        >>> pl.select(time.polars_expr).item()
+        datetime.time(12, 34, 56)
+        >>> datetime = Strptime(format=Literal("%Y-%m-%d %H:%M:%S"), source=Literal("2023-01-01 12:34:56"))
+        >>> pl.select(datetime.polars_expr).item()
+        datetime.datetime(2023, 1, 1, 12, 34, 56)
+
+    Note that this can result in ambiguous values given the format string. For example, the example below
+    parses a year followed by an hour, which means the resulting datetime will have inferred months and days.
+
+        >>> pl.select(Strptime(format=Literal("%Y %H:%M"), source=Literal("2023 12:11")).polars_expr).item()
+        datetime.datetime(2023, 1, 1, 12, 11)
+    """
+
+    KEY = "strptime"
+    REQUIRED_KWARGS = {"format", "source"}
+
+    # See https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+    DATE_PARTS: ClassVar[set[str]] = {
+        "Y",  # Year with century
+        "G",  # ISO 8601 year with century
+        "C",  # Century
+        "q",  # Quarter
+        "y",  # Year without century
+        "g",  # ISO 8601 year without century
+        "m",  # Month as a zero-padded decimal number
+        "b",  # Abbreviated month name
+        "B",  # Full month name
+        "h",  # Abbreviated month name
+        "d",  # Day of the month as a zero-padded decimal number
+        "e",  # Day of the month as a decimal number
+        "a",  # Abbreviated weekday name
+        "A",  # Full weekday name
+        "w",  # Weekday as a decimal number (0=Sunday, 6=Saturday)
+        "u",  # Weekday as a decimal number (1=Monday, 7=Sunday)
+        "j",  # Day of the year as a zero-padded decimal number
+        "U",  # Week number of the year (Sunday as the first day of the week)
+        "W",  # Week number of the year (Monday as the first day of the week)
+        "V",  # ISO 8601 week number of the year (Monday as the first day of the week)
+        "D",  # Equivalent to %m/%d/%y
+        "x",  # Locale's appropriate date representation
+        "F",  # Equivalent to %Y-%m-%d
+        "v",  # VMS date format (%e-%b-%Y)
+    }
+
+    TIME_PARTS: ClassVar[set[str]] = {
+        "H",  # Hour (24-hour clock) as a zero-padded decimal number
+        "k",  # Hour (24-hour clock) as a decimal number
+        "I",  # Hour (12-hour clock) as a zero-padded decimal number
+        "l",  # Hour (12-hour clock) as a decimal number
+        "M",  # Minute as a zero-padded decimal number
+        "S",  # Second as a zero-padded decimal number
+        "f",  # Microsecond as a decimal number, zero-padded on the left
+        "3f",  # Millisecond as a decimal number, zero-padded on the left
+        "6f",  # Microsecond as a decimal number, zero-padded on the left
+        "9f",  # Nanosecond as a decimal number, zero-padded on the left
+        "p",  # AM or PM
+        "P",  # am or pm
+        "r",  # Equivalent to %I:%M:%S %p
+        "R",  # Equivalent to %H:%M
+        "T",  # Equivalent to %H:%M:%S
+        "X",  # Locale's appropriate time representation
+        "z",  # UTC offset in the form +HHMM or -HHMM
+        ":z",  # UTC offset in the form +HH:MM or -HH:MM
+        "::z",  # UTC offset in the form +HH:MM:SS or -HH:MM:SS
+        ":::z",  # UTC offset in the form +HH
+        "Z",  # Time zone name
+    }
+
+    DATETIME_PARTS: ClassVar[set[str]] = {
+        "c",  # Locale's appropriate date and time representation
+        "+",  # Equivalent to %Y-%m-%dT%H:%M:%S%:z
+        "s",  # Unix timestamp (seconds since January 1, 1970 0:00:00 UTC)
+    }
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if not isinstance(self.format_str, str):
+            raise ValueError(
+                "The format argument must be a NodeBase instance that evaluates to a string. "
+                f"This `NodeBase` instance evaluates to a {type(self.format_str)} instead."
+            )
+
+    @property
+    def format_str(self) -> str:
+        fmt = self.kwargs["format"]
+
+        if not isinstance(fmt, NodeBase):
+            raise ValueError(
+                "The format argument must be a NodeBase instance that evaluates to a string. "
+                f"Got {type(fmt)} instead."
+            )
+
+        try:
+            return pl.select(fmt.polars_expr).item()
+        except Exception as e:
+            raise ValueError(
+                "The format argument must be a NodeBase instance that evaluates to a string. "
+                "This `NodeBase` instance can't be evaluated to a string."
+            ) from e
+
+    @property
+    def output_type(self) -> str:
+        fmt = self.format_str
+        has_date = any(f"%{part}" in fmt for part in self.DATE_PARTS)
+        has_time = any(f"%{part}" in fmt for part in self.TIME_PARTS)
+        has_datetime = any(f"%{part}" in fmt for part in self.DATETIME_PARTS)
+
+        if has_datetime or (has_date and has_time):
+            return "datetime"
+        elif has_date:
+            return "date"
+        elif has_time:
+            return "time"
+        else:
+            raise ValueError(
+                "The format string must contain at least one date or time component. The format string "
+                "should be in the syntax used by the `chrono` crate: "
+                "https://docs.rs/chrono/latest/chrono/format/strftime/index.html"
+            )
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        source_expr = self.kwargs["source"].polars_expr
+
+        return source_expr.str.strptime(
+            dtype=DATE_TIME_TYPES[self.output_type], format=self.format_str
+        )
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
+        source, format = items
+
+        return {cls.KEY: {"format": format, "source": source}}

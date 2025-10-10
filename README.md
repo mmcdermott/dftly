@@ -43,7 +43,7 @@ Suppose we have an input dataframe that looks like this:
 ...     "col1": [1, 2],
 ...     "col2": [3, 4],
 ...     "foo": ["5", "6"],
-...     "col3": [date(2020, 1, 1), date(2021, 6, 15)],
+...     "col3": ["2020-01-01", "2021-06-15"],
 ...     "bp": ["120/80", "NULL"],
 ... })
 >>> df
@@ -51,7 +51,7 @@ shape: (2, 5)
 ┌──────┬──────┬─────┬────────────┬────────┐
 │ col1 ┆ col2 ┆ foo ┆ col3       ┆ bp     │
 │ ---  ┆ ---  ┆ --- ┆ ---        ┆ ---    │
-│ i64  ┆ i64  ┆ str ┆ date       ┆ str    │
+│ i64  ┆ i64  ┆ str ┆ str        ┆ str    │
 ╞══════╪══════╪═════╪════════════╪════════╡
 │ 1    ┆ 3    ┆ 5   ┆ 2020-01-01 ┆ 120/80 │
 │ 2    ┆ 4    ┆ 6   ┆ 2021-06-15 ┆ NULL   │
@@ -91,6 +91,27 @@ shape: (2, 8)
 └─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 
 ```
+
+Other supported operations include string to time parsing.
+
+```python
+>>> ops = r"""
+... as_date: '@col3 as "%Y-%m-%d"'
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 1)
+┌────────────┐
+│ as_date    │
+│ ---        │
+│ date       │
+╞════════════╡
+│ 2020-01-01 │
+│ 2021-06-15 │
+└────────────┘
+
+```
+
+## Detailed Documentation
 
 Internally, this simply parses the yaml file into a mapping, then treats the mapping as a map from desired
 output column name to input column expression, parsing each expression via the dftly grammar. In particular,
