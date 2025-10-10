@@ -69,19 +69,21 @@ with dftly, we can do this:
 ...     "str_interp": 'f"value: {@foo} {@col1}"',
 ...     "max": "max(@col1, @col2)",
 ...     "conditional": '"big" if @col1 > 1 else "small"',
+...     "sys_bp": r"extract group 1 of /(\d+)\/(\d+)/ from @bp if /(\d+)\/(\d+)/ in @bp",
+...     "dia_bp": r"extract group 2 of /(\d+)\/(\d+)/ from @bp if /(\d+)\/(\d+)/ in @bp",
 ... }
 >>> from dftly import Parser
 >>> parser = Parser()
 >>> ops = {k: parser(v).polars_expr for k, v in ops.items()}
 >>> df.select(**ops)
-shape: (2, 6)
-┌─────┬──────┬─────────┬────────────┬─────┬─────────────┐
-│ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional │
-│ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         │
-│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         │
-╞═════╪══════╪═════════╪════════════╪═════╪═════════════╡
-│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       │
-│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         │
-└─────┴──────┴─────────┴────────────┴─────┴─────────────┘
+shape: (2, 8)
+┌─────┬──────┬─────────┬────────────┬─────┬─────────────┬────────┬────────┐
+│ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional ┆ sys_bp ┆ dia_bp │
+│ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         ┆ ---    ┆ ---    │
+│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         ┆ str    ┆ str    │
+╞═════╪══════╪═════════╪════════════╪═════╪═════════════╪════════╪════════╡
+│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       ┆ 120    ┆ 80     │
+│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
+└─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 
 ```

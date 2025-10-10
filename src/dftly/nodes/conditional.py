@@ -1,5 +1,4 @@
 from .base import KwargsOnlyFn
-from .utils import validate_dict_keys
 import polars as pl
 from typing import Any
 
@@ -28,17 +27,8 @@ class Conditional(KwargsOnlyFn):
     """
 
     KEY = "conditional"
-
-    def __post_init__(self):
-        missing, extra = validate_dict_keys(
-            self.kwargs,
-            required={"when", "then"},
-            allowed={"otherwise"},
-        )
-        if missing:
-            raise ValueError(f"Missing required keys for {self.KEY}: {missing}")
-        if extra:
-            raise ValueError(f"Extra unallowed keys for {self.KEY}: {extra}")
+    REQUIRED_KWARGS = {"when", "then"}
+    OPTIONAL_KWARGS = {"otherwise"}
 
     @property
     def polars_expr(self) -> pl.Expr:

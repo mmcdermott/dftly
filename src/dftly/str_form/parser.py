@@ -6,7 +6,16 @@ from importlib.resources import files
 from lark import Lark, Transformer
 from lark.visitors import Discard
 
-from ..nodes import BINARY_OPS, NODES, Column, StringInterpolate, Conditional, Literal
+from ..nodes import (
+    BINARY_OPS,
+    NODES,
+    Column,
+    StringInterpolate,
+    Conditional,
+    Literal,
+    RegexExtract,
+    RegexMatch,
+)
 
 
 GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
@@ -52,6 +61,13 @@ class DftlyGrammar(Transformer):
         {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]},
                          'then': {'literal': 'big'},
                          'otherwise': {'literal': 'small'}}}
+
+    Regex operations are supported via the following syntax:
+
+        >>> DftlyGrammar.parse_str("extract /\\d+/ from @text")
+        {'regex_extract': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
+        >>> DftlyGrammar.parse_str("/\\d+/ in @text")
+        {'regex_match': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
     """
 
     @classmethod
@@ -66,6 +82,9 @@ class DftlyGrammar(Transformer):
             return float(token)
         else:
             return int(token)
+
+    def INT(self, token: str) -> int:
+        return int(token)
 
     def STRING(self, token: str) -> str:
         """Remove the surrounding quotes from a string token."""
@@ -109,11 +128,35 @@ class DftlyGrammar(Transformer):
 
         return StringInterpolate.from_lark(pattern)
 
-    def IF(self, token: str) -> str:
+    def IF(self, token: str):
         return Discard
 
-    def ELSE(self, token: str) -> str:
+    def ELSE(self, token: str):
         return Discard
 
     def conditional_expr(self, items: list[Any]) -> dict:
         return Conditional.from_lark(items)
+
+    def EXTRACT(self, token: str):
+        return Discard
+
+    def GROUP(self, token: str):
+        return Discard
+
+    def OF(self, token: str):
+        return Discard
+
+    def FROM(self, token: str):
+        return Discard
+
+    def IN(self, token: str):
+        return Discard
+
+    def REGEX_LITERAL(self, token: str) -> str:
+        return Literal.from_lark(str(token[1:-1]))
+
+    def regex_extract(self, items: list[Any]) -> dict:
+        return RegexExtract.from_lark(items)
+
+    def regex_match(self, items: list[Any]) -> dict:
+        return RegexMatch.from_lark(items)

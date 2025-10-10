@@ -26,9 +26,9 @@ OR.2: "or"i
 NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
 IN: /in/i
+INT: /\d+/
 NUMBER: /\d+(?:\.\d+)?/
-REGEX_PAREN_TOKEN.2: /\([^\s]+\)/
-REGEX_TOKEN: /[^\s()]+/
+REGEX_LITERAL: /\/([^\/\\\n]|\\.)*\//
 LPAR: "("
 RPAR: ")"
 EXTRACT.2: /extract/i
@@ -56,14 +56,18 @@ AGAINST.2: /against/i
 
 ?unary: primary
 
-?primary: call_expr
+?paren_group: "(" expr ")"
+
+?call_expr: NAME "(" [args] ")"   -> func
+?args: expr ("," expr)*
+
+?regex: EXTRACT (GROUP INT OF)? REGEX_LITERAL FROM expr -> regex_extract
+      | REGEX_LITERAL IN expr -> regex_match
+
+?primary: regex
+        | call_expr
         | (AT)NAME -> column
         | (FORMAT_PFX)STRING -> format_string
         | NUMBER
         | STRING
-        | group
-
-?group: "(" expr ")"
-
-?call_expr: NAME "(" [args] ")"   -> func
-?args: expr ("," expr)*
+        | paren_group

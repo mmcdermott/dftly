@@ -8,7 +8,7 @@ from .comparison import (
     GreaterThanOrEqual,
     LessThanOrEqual,
 )
-from .str import StringInterpolate
+from .str import StringInterpolate, RegexExtract, RegexMatch
 from .conditional import Conditional
 
 __nodes = [
@@ -28,6 +28,8 @@ __nodes = [
     GreaterThanOrEqual,
     LessThanOrEqual,
     StringInterpolate,
+    RegexExtract,
+    RegexMatch,
     Conditional,
 ]
 

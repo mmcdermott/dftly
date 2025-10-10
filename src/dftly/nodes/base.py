@@ -13,6 +13,7 @@ from datetime import datetime
 
 from abc import ABC, abstractmethod
 import polars as pl
+from .utils import validate_dict_keys
 
 
 EXPRESSION_KEY = "expression"
@@ -309,11 +310,17 @@ class _ArgsFn(NodeBase):
 
 
 class _KwargsFn(NodeBase):
-    """Base class for nodes that accept only keyword arguments.".
+    """Base class for nodes that accept only keyword arguments.
+
+    The class variables REQUIRED_KWARGS and OPTIONAL_KWARGS can be set to define required and optional
+    keyword arguments. If either is set, the other can be None to indicate no required or optional args.
+    If both are None, no validation is performed on the keyword arguments.
 
     Examples:
         >>> class MyKwargsFn(_KwargsFn):
         ...    KEY = "mykwargsfn"
+        ...    REQUIRED_KWARGS = {"a"}
+        ...    OPTIONAL_KWARGS = {"b", "c"}
         ...    @property
         ...    def polars_expr(self): pass
         ...    @classmethod
@@ -321,18 +328,38 @@ class _KwargsFn(NodeBase):
         >>> MyKwargsFn(a=1, b=2)
         MyKwargsFn(a=1, b=2)
         >>> MyKwargsFn()
-        MyKwargsFn()
+        Traceback (most recent call last):
+            ...
+        ValueError: Missing required keys for mykwargsfn: {'a'}
+        >>> MyKwargsFn(a=1, d=4)
+        Traceback (most recent call last):
+            ...
+        ValueError: Extra unallowed keys for mykwargsfn: {'d'}
         >>> MyKwargsFn(1, 2)
         Traceback (most recent call last):
             ...
         ValueError: mykwargsfn does not accept positional arguments
     """
 
+    REQUIRED_KWARGS: ClassVar[set[str] | None] = None
+    OPTIONAL_KWARGS: ClassVar[set[str] | None] = None
+
     def __post_init__(self):
         super().__post_init__()
 
         if self.args:
             raise ValueError(f"{self.KEY} does not accept positional arguments")
+
+        if self.REQUIRED_KWARGS is not None or self.OPTIONAL_KWARGS is not None:
+            missing, extra = validate_dict_keys(
+                self.kwargs,
+                required=self.REQUIRED_KWARGS,
+                allowed=self.OPTIONAL_KWARGS,
+            )
+            if missing:
+                raise ValueError(f"Missing required keys for {self.KEY}: {missing}")
+            if extra:
+                raise ValueError(f"Extra unallowed keys for {self.KEY}: {extra}")
 
 
 class _UnaryOp(_ArgsFn):
@@ -576,4 +603,8 @@ class KwargsOnlyFn(NestedArgsNode, _KwargsFn):
     """Base class for non-terminal nodes that accept only keyword arguments.
 
     Requires that all keyword arguments be str:NodeBase pairs and that there be only keyword arguments.
+
+    The class variables REQUIRED_KWARGS and OPTIONAL_KWARGS can be set to define required and optional keyword
+    arguments. If either is set, the other can be None to indicate no required or optional args. If both are
+    None, no validation is performed on the keyword arguments.
     """
