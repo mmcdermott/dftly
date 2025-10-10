@@ -8,6 +8,7 @@ from .comparison import (
     GreaterThanOrEqual,
     LessThanOrEqual,
 )
+from .str import RegexExtract
 
 __nodes = [
     Literal,
@@ -22,6 +23,7 @@ __nodes = [
     NotEqual,
     GreaterThanOrEqual,
     LessThanOrEqual,
+    RegexExtract,
 ]
 
 NODES = {node.KEY: node for node in __nodes}

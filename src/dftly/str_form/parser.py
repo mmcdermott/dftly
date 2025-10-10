@@ -65,6 +65,28 @@ class DftlyGrammar(Transformer):
         at_sign, column_name = items
         return Column.from_lark(column_name)
 
+    def REGEX_LITERAL(self, token: str) -> str:
+        pattern = token[1:-1]
+        return pattern.replace("\\/", "/")
+
+    def group_clause(self, items: list[Any]) -> Any:
+        return items[-1]
+
+    def regex_pattern(self, items: list[Any]) -> Any:
+        return items[0]
+
+    def regex_extract_simple(self, items: list[Any]) -> dict:
+        pattern, _, value = items
+        return {"pattern": pattern, "from": value}
+
+    def regex_extract_grouped(self, items: list[Any]) -> dict:
+        group, _, pattern, _, value = items
+        return {"pattern": pattern, "from": value, "group": group}
+
+    def regex_extract_stmt(self, items: list[Any]) -> dict:
+        params = items[-1]
+        return {"regex_extract": params}
+
     def binary_expr(self, items: list[dict | str]) -> dict:
         left, op, right = items
 

@@ -82,3 +82,29 @@ shape: (2, 3)
 └─────┴──────┴─────────┘
 
 ```
+
+Regex extraction can be expressed either through YAML mappings or the string DSL:
+
+```python
+>>> bp_ops = {
+...     "systolic": {
+...         "regex_extract": {
+...             "from": {"column": "bp"},
+...             "pattern": r"^(\d+)/(\d+)$",
+...         }
+...     },
+...     "diastolic": "extract group 2 of /^(\d+)\/(\d+)$/ from @bp",
+... }
+>>> bp_exprs = {name: parser(expr).polars_expr for name, expr in bp_ops.items()}
+>>> df.select(**bp_exprs)
+shape: (2, 2)
+┌──────────┬───────────┐
+│ systolic ┆ diastolic │
+│ ---      ┆ ---       │
+│ str      ┆ str       │
+╞══════════╪═══════════╡
+│ 120      ┆ 80        │
+│ null     ┆ null      │
+└──────────┴───────────┘
+
+```
