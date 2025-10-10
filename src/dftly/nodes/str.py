@@ -1,4 +1,4 @@
-from .base import ArgsOnlyFn
+from .base import ArgsOnlyFn, Literal
 import polars as pl
 import string
 
@@ -84,7 +84,13 @@ class StringInterpolate(ArgsOnlyFn):
         self.fields = [a.polars_expr for a in self.args[1:]]
 
     @classmethod
-    def from_lark(cls, pattern: str) -> dict[str, list]:
+    def from_lark(cls, pattern: str | dict) -> dict[str, list]:
+        if isinstance(pattern, dict):
+            if not Literal.matches(pattern):
+                raise ValueError(
+                    "When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node."
+                )
+            pattern = Literal.args_from_value(pattern)[0][0]
         fields = []
         fmt_parts = []
         for literal, field, _, _ in string.Formatter().parse(pattern):

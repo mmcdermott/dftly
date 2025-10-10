@@ -4,8 +4,9 @@ from typing import Any
 
 from importlib.resources import files
 from lark import Lark, Transformer
+from lark.visitors import Discard
 
-from ..nodes import BINARY_OPS, NODES, Column, StringInterpolate
+from ..nodes import BINARY_OPS, NODES, Column, StringInterpolate, Conditional, Literal
 
 
 GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
@@ -36,12 +37,21 @@ class DftlyGrammar(Transformer):
     Strings will be parsed into string nodes:
 
         >>> DftlyGrammar.parse_str("'hello' + ' ' + 'world'")
-        {'add': [{'add': ['hello', ' ']}, 'world']}
+        {'add': [{'add': [{'literal': 'hello'}, {'literal': ' '}]}, {'literal': 'world'}]}
 
     String interpolation is supported via f-strings:
 
         >>> DftlyGrammar.parse_str("f'hello {@name}'")
         {'string_interpolate': [{'literal': 'hello {}'}, '@name']}
+
+    Conditional expressions can be expressed using the `... if ... else ...` syntax; `else ...` is optional:
+
+        >>> DftlyGrammar.parse_str("'big' if @a > 5")
+        {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]}, 'then': {'literal': 'big'}}}
+        >>> DftlyGrammar.parse_str("'big' if @a > 5 else 'small'")
+        {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]},
+                         'then': {'literal': 'big'},
+                         'otherwise': {'literal': 'small'}}}
     """
 
     @classmethod
@@ -59,7 +69,7 @@ class DftlyGrammar(Transformer):
 
     def STRING(self, token: str) -> str:
         """Remove the surrounding quotes from a string token."""
-        return str(token[1:-1])
+        return Literal.from_lark(str(token[1:-1]))
 
     def NAME(self, token: str) -> str:
         """Return the name token as a string."""
@@ -98,3 +108,12 @@ class DftlyGrammar(Transformer):
         f, pattern = items
 
         return StringInterpolate.from_lark(pattern)
+
+    def IF(self, token: str) -> str:
+        return Discard
+
+    def ELSE(self, token: str) -> str:
+        return Discard
+
+    def conditional_expr(self, items: list[Any]) -> dict:
+        return Conditional.from_lark(items)

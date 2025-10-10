@@ -271,7 +271,7 @@ class NodeBase(ABC):
 
 # Intermediate base shared validators
 class _ArgsFn(NodeBase):
-    """Base class for nodes that accept only positoinal arguments and apply a simple polars function to them.
+    """Base class for nodes that accept only positional arguments and apply a simple polars function to them.
 
     Examples:
         >>> class MyArgsFn(_ArgsFn):
@@ -306,6 +306,33 @@ class _ArgsFn(NodeBase):
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
         """This helper returns a dictionary that will parse into this node from a set of parsed lark args."""
         return {cls.KEY: items}
+
+
+class _KwargsFn(NodeBase):
+    """Base class for nodes that accept only keyword arguments.".
+
+    Examples:
+        >>> class MyKwargsFn(_KwargsFn):
+        ...    KEY = "mykwargsfn"
+        ...    @property
+        ...    def polars_expr(self): pass
+        ...    @classmethod
+        ...    def from_lark(cls, items): pass
+        >>> MyKwargsFn(a=1, b=2)
+        MyKwargsFn(a=1, b=2)
+        >>> MyKwargsFn()
+        MyKwargsFn()
+        >>> MyKwargsFn(1, 2)
+        Traceback (most recent call last):
+            ...
+        ValueError: mykwargsfn does not accept positional arguments
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.args:
+            raise ValueError(f"{self.KEY} does not accept positional arguments")
 
 
 class _UnaryOp(_ArgsFn):
@@ -542,4 +569,11 @@ class ArgsOnlyFn(NestedArgsNode, _ArgsFn):
     """Base class for non-terminal nodes that accept only positional arguments.
 
     Requires that all arguments be NodeBase instances and that there be only positional arguments.
+    """
+
+
+class KwargsOnlyFn(NestedArgsNode, _KwargsFn):
+    """Base class for non-terminal nodes that accept only keyword arguments.
+
+    Requires that all keyword arguments be str:NodeBase pairs and that there be only keyword arguments.
     """

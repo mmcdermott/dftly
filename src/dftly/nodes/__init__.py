@@ -1,5 +1,5 @@
 from .base import BinaryOp, UnaryOp, Literal, Column
-from .arithmetic import Add, Subtract, Multiply, Divide
+from .arithmetic import Add, Subtract, Multiply, Divide, Mean, Min, Max
 from .comparison import (
     GreaterThan,
     LessThan,
@@ -9,10 +9,14 @@ from .comparison import (
     LessThanOrEqual,
 )
 from .str import StringInterpolate
+from .conditional import Conditional
 
 __nodes = [
     Literal,
     Column,
+    Mean,
+    Min,
+    Max,
     Add,
     Subtract,
     Multiply,
@@ -24,6 +28,7 @@ __nodes = [
     GreaterThanOrEqual,
     LessThanOrEqual,
     StringInterpolate,
+    Conditional,
 ]
 
 NODES = {node.KEY: node for node in __nodes}

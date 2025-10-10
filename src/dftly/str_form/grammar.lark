@@ -40,7 +40,10 @@ AGAINST.2: /against/i
 
 ?start: expr
 
-?expr: comparison
+?expr: conditional
+
+?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
+            | comparison
 
 ?comparison: additive (NE|EQ|GE|LE|GT|LT) additive   -> binary_expr
            | additive

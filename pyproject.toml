@@ -35,3 +35,4 @@ addopts = [
   "--doctest-modules",
   "--doctest-glob=*.md",
 ]
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]

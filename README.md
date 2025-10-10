@@ -67,19 +67,21 @@ with dftly, we can do this:
 ...     "diff": "@col2 - @col1",
 ...     "compare": "@col1 > (@col2 - 3) * 3",
 ...     "str_interp": 'f"value: {@foo} {@col1}"',
+...     "max": "max(@col1, @col2)",
+...     "conditional": '"big" if @col1 > 1 else "small"',
 ... }
 >>> from dftly import Parser
 >>> parser = Parser()
 >>> ops = {k: parser(v).polars_expr for k, v in ops.items()}
 >>> df.select(**ops)
-shape: (2, 4)
-┌─────┬──────┬─────────┬────────────┐
-│ sum ┆ diff ┆ compare ┆ str_interp │
-│ --- ┆ ---  ┆ ---     ┆ ---        │
-│ i64 ┆ i64  ┆ bool    ┆ str        │
-╞═════╪══════╪═════════╪════════════╡
-│ 4   ┆ 2    ┆ true    ┆ value: 5 1 │
-│ 6   ┆ 2    ┆ false   ┆ value: 6 2 │
-└─────┴──────┴─────────┴────────────┘
+shape: (2, 6)
+┌─────┬──────┬─────────┬────────────┬─────┬─────────────┐
+│ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional │
+│ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         │
+│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         │
+╞═════╪══════╪═════════╪════════════╪═════╪═════════════╡
+│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       │
+│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         │
+└─────┴──────┴─────────┴────────────┴─────┴─────────────┘
 
 ```
