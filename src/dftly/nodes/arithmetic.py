@@ -3,8 +3,67 @@
 As non-terminals, all args and kwargs to these nodes must be other nodes.
 """
 
-from .base import ArgsOnlyFn, BinaryOp
+from .base import ArgsOnlyFn, BinaryOp, UnaryOp
 import polars as pl
+
+
+class Not(UnaryOp):
+    """This non-terminal node represents the logical NOT of an expression.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(Not(Literal(True)).polars_expr).item()
+        False
+    """
+
+    KEY = "not"
+    SYM = ("!", "not")
+    pl_fn = pl.Expr.not_
+
+
+class Negate(UnaryOp):
+    """This non-terminal node represents the negation of an expression.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(Negate(Literal(5)).polars_expr).item()
+        -5
+    """
+
+    KEY = "negate"
+    SYM = "-"
+
+    @classmethod
+    def pl_fn(cls, arg: pl.Expr) -> pl.Expr:
+        return -arg
+
+
+class And(ArgsOnlyFn):
+    """This non-terminal node represents the logical AND of multiple expressions.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(And(Literal(True), Literal(False), Literal(True)).polars_expr).item()
+        False
+    """
+
+    KEY = "and"
+    SYM = ("&&", "and")
+    pl_fn = pl.all_horizontal
+
+
+class Or(ArgsOnlyFn):
+    """This non-terminal node represents the logical OR of multiple expressions.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(Or(Literal(True), Literal(False), Literal(True)).polars_expr).item()
+        True
+    """
+
+    KEY = "or"
+    SYM = ("||", "or")
+    pl_fn = pl.any_horizontal
 
 
 class Add(ArgsOnlyFn):

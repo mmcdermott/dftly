@@ -48,7 +48,13 @@ AGAINST.2: /against/i
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
-            | comparison
+            | bool_and
+
+?bool_and: bool_and (AND_SYM|AND) bool_or   -> binary_expr
+         | bool_or
+
+?bool_or: bool_or (OR_SYM|OR) comparison   -> binary_expr
+        | comparison
 
 ?comparison: additive (NE|EQ|GE|LE|GT|LT) additive   -> binary_expr
            | additive
@@ -62,7 +68,9 @@ AGAINST.2: /against/i
 ?local_cast: unary CAST NAME   -> cast_expr
            | unary
 
-?unary: primary
+?unary: (NOT_SYM|NOT) unary   -> unary_expr
+      | (PLUS|MINUS) unary    -> unary_expr
+      | primary
 
 ?paren_group: "(" expr ")"
 

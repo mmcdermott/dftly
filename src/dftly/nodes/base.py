@@ -30,6 +30,74 @@ class NodeBase(ABC):
     KEY: ClassVar[str]
     is_terminal: ClassVar[bool] = False
 
+    @staticmethod
+    def unique_dict_by_prop(items: list, prop: str = "KEY") -> dict:
+        """A helper to create a dictionary mapping unique property values to nodes.
+
+        This is useful to create a map of keys or symbols to nodes.
+
+        Args:
+            items: A list of nodes to index.
+            prop: The property of the node to index by. Defaults to "KEY".
+
+        Returns:
+            A dictionary mapping property values to nodes. If a property value is a list of strings, each
+            element of the list will be mapped to the node.
+
+        Raises:
+            ValueError: If any node does not have the specified property, or if there are duplicate
+                property values.
+
+        Examples:
+            >>> class MyNode(NodeBase):
+            ...    KEY = "mynode"
+            ...    SYM = ["+", "-"]
+            ...    BAD = "bad"
+            ...    def __post_init__(self): pass
+            ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
+            >>> class OtherNode(NodeBase):
+            ...    KEY = "othernode"
+            ...    SYM = "*"
+            ...    BAD = "bad"
+            ...    def __post_init__(self): pass
+            ...    def polars_expr(self): pass
+            ...    def from_lark(cls, items: list[Any]) -> Any: pass
+            >>> NodeBase.unique_dict_by_prop([MyNode, OtherNode])
+            {'mynode': <class ...MyNode...>, 'othernode': <class ...OtherNode...>}
+            >>> NodeBase.unique_dict_by_prop([MyNode, OtherNode], prop="SYM")
+            {'+': <class ...MyNode...>, '-': <class ...MyNode...>, '*': <class ...OtherNode...>}
+            >>> NodeBase.unique_dict_by_prop([MyNode, OtherNode], prop="NONEXISTENT")
+            Traceback (most recent call last):
+                ...
+            ValueError: Node ... does not have property NONEXISTENT
+            >>> NodeBase.unique_dict_by_prop([MyNode, OtherNode], prop="BAD")
+            Traceback (most recent call last):
+                ...
+            ValueError: Duplicate values for property BAD: {'bad'}
+        """
+
+        out = {}
+        duplicates = set()
+
+        for node in items:
+            if not hasattr(node, prop):
+                raise ValueError(f"Node {node} does not have property {prop}")
+
+            val = getattr(node, prop)
+            if isinstance(val, str):
+                val = [val]
+
+            for v in val:
+                if v in out:
+                    duplicates.add(v)
+                out[v] = node
+
+        if duplicates:
+            raise ValueError(f"Duplicate values for property {prop}: {duplicates}")
+
+        return out
+
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
@@ -580,7 +648,7 @@ class BinaryOp(NestedArgsNode, _BinaryOp):
     Requires that all arguments be NodeBase instances and that there be exactly two positional arguments.
     """
 
-    SYM: ClassVar[str]
+    SYM: ClassVar[str | list[str]]
 
 
 class UnaryOp(NestedArgsNode, _UnaryOp):
@@ -589,7 +657,7 @@ class UnaryOp(NestedArgsNode, _UnaryOp):
     Requires that all arguments be NodeBase instances and that there be exactly one positional argument.
     """
 
-    SYM: ClassVar[str]
+    SYM: ClassVar[str | list[str]]
 
 
 class ArgsOnlyFn(NestedArgsNode, _ArgsFn):

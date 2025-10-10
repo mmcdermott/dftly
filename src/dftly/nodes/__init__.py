@@ -1,5 +1,17 @@
-from .base import BinaryOp, UnaryOp, Literal, Column
-from .arithmetic import Add, Subtract, Multiply, Divide, Mean, Min, Max
+from .base import BinaryOp, UnaryOp, Literal, Column, NodeBase
+from .arithmetic import (
+    Not,
+    Negate,
+    And,
+    Or,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Mean,
+    Min,
+    Max,
+)
 from .comparison import (
     GreaterThan,
     LessThan,
@@ -15,6 +27,10 @@ from .types import Cast
 __nodes = [
     Literal,
     Column,
+    Not,
+    Negate,
+    And,
+    Or,
     Mean,
     Min,
     Max,
@@ -36,9 +52,14 @@ __nodes = [
     Strptime,
 ]
 
-NODES = {node.KEY: node for node in __nodes}
+NODES = NodeBase.unique_dict_by_prop(__nodes)
 
 __binary_ops = [node for node in __nodes if issubclass(node, BinaryOp)]
-__binary_ops.extend([Add, Multiply])  # Add and Multiply are n-ary but also binary
-BINARY_OPS = {node.SYM: node for node in __binary_ops}
-UNARY_OPS = {node.SYM: node for node in __nodes if issubclass(node, UnaryOp)}
+__binary_ops.extend(
+    [Add, Multiply, And, Or]
+)  # Additional n-ary ops that can be used as binary ops
+
+BINARY_OPS = NodeBase.unique_dict_by_prop(__binary_ops, "SYM")
+
+__unary_ops = [node for node in __nodes if issubclass(node, UnaryOp)]
+UNARY_OPS = NodeBase.unique_dict_by_prop(__unary_ops, "SYM")

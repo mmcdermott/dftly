@@ -35,8 +35,8 @@ class DftlyGrammar(Transformer):
         {'add': [1, {'multiply': [2, 3]}]}
         >>> DftlyGrammar.parse_str("1 / (2 + 3) > 0.1")
         {'greater_than': [{'divide': [1, {'add': [2, 3]}]}, 0.1]}
-        >>> DftlyGrammar.parse_str("5 == 2 + 3")
-        {'equal': [5, {'add': [2, 3]}]}
+        >>> DftlyGrammar.parse_str("5 == 2 + 3 and 4 < 10")
+        {'and': [{'equal': [5, {'add': [2, 3]}]}, {'less_than': [4, 10]}]}
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
         {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
 
