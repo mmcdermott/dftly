@@ -1,0 +1,89 @@
+%import common.WS
+%ignore WS
+STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
+
+PLUS: "+"
+MINUS: "-"
+TIMES: "*"
+DIV: "/"
+AT: "@"
+EQ: "=="
+NE: "!="
+GE: ">="
+LE: "<="
+GT: ">"
+LT: "<"
+CAST: "::"
+FORMAT_PFX: "f"
+AS: /as/i
+IF: /if/i
+ELSE: /else/i
+AND_SYM: "&&"
+OR_SYM: "||"
+NOT_SYM: "!"
+NOT_MATCH.2: /not\s+match/i
+AND.2: "and"i
+OR.2: "or"i
+NOT.2: "not"i
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
+IN: /in/i
+INT: /\d+/
+NUMBER: /\d+(?:\.\d+)?/
+REGEX_LITERAL: /\/([^\/\\\n]|\\.)*\//
+LPAR: "("
+RPAR: ")"
+EXTRACT.2: /extract/i
+GROUP.2: /group/i
+OF.2: /of/i
+FROM.2: /from/i
+MATCH.2: /match/i
+AGAINST.2: /against/i
+
+?start: expr
+
+?expr: global_cast
+
+?global_cast: conditional AS NAME   -> cast_expr
+            | conditional AS STRING -> strptime
+            | conditional
+
+?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
+            | bool_and
+
+?bool_and: bool_and (AND_SYM|AND) bool_or   -> binary_expr
+         | bool_or
+
+?bool_or: bool_or (OR_SYM|OR) comparison   -> binary_expr
+        | comparison
+
+?comparison: additive (NE|EQ|GE|LE|GT|LT) additive   -> binary_expr
+           | additive
+
+?additive: additive (PLUS|MINUS) multiplicative   -> binary_expr
+         | multiplicative
+
+?multiplicative: multiplicative (TIMES|DIV) local_cast  -> binary_expr
+               | local_cast
+
+?local_cast: unary CAST NAME   -> cast_expr
+           | unary
+
+?unary: (NOT_SYM|NOT) unary   -> unary_expr
+      | (PLUS|MINUS) unary    -> unary_expr
+      | primary
+
+?paren_group: "(" expr ")"
+
+?call_expr: NAME "(" [args] ")"   -> func
+?args: expr ("," expr)*
+
+?regex: EXTRACT (GROUP INT OF)? REGEX_LITERAL FROM expr -> regex_extract
+      | REGEX_LITERAL IN expr -> regex_match
+
+?primary: regex
+        | call_expr
+        | (AT)NAME -> column
+        | (FORMAT_PFX)STRING -> format_string
+        | NUMBER
+        | STRING
+        | paren_group

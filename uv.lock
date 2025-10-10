@@ -99,13 +99,9 @@ name = "dftly"
 source = { editable = "." }
 dependencies = [
     { name = "lark" },
+    { name = "polars" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-polars = [
-    { name = "polars" },
 ]
 
 [package.dev-dependencies]
@@ -120,11 +116,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "lark" },
-    { name = "polars", marker = "extra == 'polars'", specifier = "~=1.33.0" },
+    { name = "polars", specifier = "~=1.33.0" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
-provides-extras = ["polars"]
 
 [package.metadata.requires-dev]
 dev = [
