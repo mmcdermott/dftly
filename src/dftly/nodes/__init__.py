@@ -10,6 +10,7 @@ from .comparison import (
 )
 from .str import StringInterpolate, RegexExtract, RegexMatch
 from .conditional import Conditional
+from .types import Cast
 
 __nodes = [
     Literal,
@@ -31,6 +32,7 @@ __nodes = [
     RegexExtract,
     RegexMatch,
     Conditional,
+    Cast,
 ]
 
 NODES = {node.KEY: node for node in __nodes}

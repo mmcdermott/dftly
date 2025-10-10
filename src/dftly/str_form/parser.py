@@ -9,6 +9,7 @@ from lark.visitors import Discard
 from ..nodes import (
     BINARY_OPS,
     NODES,
+    Cast,
     Column,
     StringInterpolate,
     Conditional,
@@ -68,6 +69,17 @@ class DftlyGrammar(Transformer):
         {'regex_extract': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
         >>> DftlyGrammar.parse_str("/\\d+/ in @text")
         {'regex_match': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
+
+    Casting is supported via the `::` or `... as ...` syntax. Note the two have different precedence, with
+    `::` having higher precedence than arithmetic operations, and `as` having lower precedence.
+
+        >>> DftlyGrammar.parse_str("4 + '3'::int")
+        {'add': [4, {'cast': [{'literal': '3'}, {'literal': 'int'}]}]}
+        >>> DftlyGrammar.parse_str("'2023-' + '01-' + '01' as date")
+        {'cast': [{'add': [{'add': [{'literal': '2023-'},
+                                    {'literal': '01-'}]},
+                           {'literal': '01'}]},
+                  {'literal': 'date'}]}
     """
 
     @classmethod
@@ -155,8 +167,18 @@ class DftlyGrammar(Transformer):
     def REGEX_LITERAL(self, token: str) -> str:
         return Literal.from_lark(str(token[1:-1]))
 
+    def CAST(self, token: str):
+        return Discard
+
+    def AS(self, token: str):
+        return Discard
+
     def regex_extract(self, items: list[Any]) -> dict:
         return RegexExtract.from_lark(items)
 
     def regex_match(self, items: list[Any]) -> dict:
         return RegexMatch.from_lark(items)
+
+    def cast_expr(self, items: list[Any]) -> dict:
+        input, output_type = items
+        return Cast.from_lark([input, Literal.from_lark(output_type)])

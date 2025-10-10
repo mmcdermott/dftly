@@ -13,6 +13,7 @@ GE: ">="
 LE: "<="
 GT: ">"
 LT: "<"
+CAST: "::"
 FORMAT_PFX: "f"
 AS: /as/i
 IF: /if/i
@@ -40,7 +41,10 @@ AGAINST.2: /against/i
 
 ?start: expr
 
-?expr: conditional
+?expr: global_cast
+
+?global_cast: conditional AS NAME   -> cast_expr
+            | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
             | comparison
@@ -51,8 +55,11 @@ AGAINST.2: /against/i
 ?additive: additive (PLUS|MINUS) multiplicative   -> binary_expr
          | multiplicative
 
-?multiplicative: multiplicative (TIMES|DIV) unary  -> binary_expr
-               | unary
+?multiplicative: multiplicative (TIMES|DIV) local_cast  -> binary_expr
+               | local_cast
+
+?local_cast: unary CAST NAME   -> cast_expr
+           | unary
 
 ?unary: primary
 

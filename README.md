@@ -64,13 +64,13 @@ with dftly, we can write a yaml file like this:
 ```python
 >>> ops = r"""
 ... sum: "@col1 + @col2"
-... diff: "@col2 - @col1"
+... diff: "@foo::int - @col1"
 ... compare: "@col1 > (@col2 - 3) * 3"
 ... str_interp: 'f"value: {@foo} {@col1}"'
 ... max: "max(@col1, @col2)"
 ... conditional: '"big" if @col1 > 1 else "small"'
 ... sys_bp: "extract group 1 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
-... dia_bp: "extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+... dia_bp: "(extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp) as float"
 ... """
 
 ```
@@ -84,10 +84,10 @@ shape: (2, 8)
 ┌─────┬──────┬─────────┬────────────┬─────┬─────────────┬────────┬────────┐
 │ sum ┆ diff ┆ compare ┆ str_interp ┆ max ┆ conditional ┆ sys_bp ┆ dia_bp │
 │ --- ┆ ---  ┆ ---     ┆ ---        ┆ --- ┆ ---         ┆ ---    ┆ ---    │
-│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         ┆ str    ┆ str    │
+│ i64 ┆ i64  ┆ bool    ┆ str        ┆ i64 ┆ str         ┆ str    ┆ f32    │
 ╞═════╪══════╪═════════╪════════════╪═════╪═════════════╪════════╪════════╡
-│ 4   ┆ 2    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       ┆ 120    ┆ 80     │
-│ 6   ┆ 2    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
+│ 4   ┆ 4    ┆ true    ┆ value: 5 1 ┆ 3   ┆ small       ┆ 120    ┆ 80.0   │
+│ 6   ┆ 4    ┆ false   ┆ value: 6 2 ┆ 4   ┆ big         ┆ null   ┆ null   │
 └─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 
 ```
