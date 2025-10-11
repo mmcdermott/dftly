@@ -6,7 +6,7 @@ PLUS: "+"
 MINUS: "-"
 TIMES: "*"
 DIV: "/"
-AT: "@"
+DOLLAR: "$"
 EQ: "=="
 NE: "!="
 GE: ">="
@@ -82,7 +82,7 @@ AGAINST.2: /against/i
 
 ?primary: regex
         | call_expr
-        | (AT)NAME -> column
+        | (DOLLAR)NAME -> column
         | (FORMAT_PFX)STRING -> format_string
         | NUMBER
         | STRING
