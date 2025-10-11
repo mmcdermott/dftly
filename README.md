@@ -97,7 +97,7 @@ more:
 
 ```python
 >>> ops = r"""
-... as_date: '@col3 as "%Y-%m-%d"'
+... as_date: '@col3::"%Y-%m-%d"'
 ... days_later: '(@col3 as "%Y-%m-%d") + @col1::days'
 ... """
 >>> df.select(**Parser.to_polars(ops))
