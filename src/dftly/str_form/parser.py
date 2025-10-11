@@ -82,12 +82,15 @@ class DftlyGrammar(Transformer):
                            {'literal': '01'}]},
                   {'literal': 'date'}]}
 
-    The `... as ...` syntax can also be used to indicate string parsing, which currently only supports
+    The `::` or `... as ...` syntax can also be used to indicate string parsing, which currently only supports
     datetime parsing via strptime:
 
         >>> DftlyGrammar.parse_str("'2023-01-01 12:34:56' as '%Y-%m-%d %H:%M:%S'")
         {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'},
                       'source': {'literal': '2023-01-01 12:34:56'}}}
+        >>> DftlyGrammar.parse_str("'2023 01 01'::'%Y %m %d'")
+        {'strptime': {'format': {'literal': '%Y %m %d'},
+                      'source': {'literal': '2023 01 01'}}}
     """
 
     @classmethod
