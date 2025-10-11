@@ -62,7 +62,7 @@ class StringInterpolate(ArgsOnlyFn):
                 "StringInterpolate requires more than one argument; it takes both the pattern string (first) "
                 "and the fields to interpolate into the pattern (subsequent). "
                 f"Got {len(self.args)} argument(s): {self.args}. "
-                'If you want to infer the fields from the pattern, use a string (e.g., \'f"foo{@bar}" and '
+                'If you want to infer the fields from the pattern, use a string (e.g., \'f"foo{$bar}" and '
                 "the fields will be inferred automatically."
             )
 

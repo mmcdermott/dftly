@@ -40,9 +40,9 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
         {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
 
-    You can also express columns using the `"@column_name"` syntax:
+    You can also express columns using the `"$column_name"` syntax:
 
-        >>> DftlyGrammar.parse_str("@a + @b * 3")
+        >>> DftlyGrammar.parse_str("$a + $b * 3")
         {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, 3]}]}
 
     Strings will be parsed into string nodes:
@@ -52,23 +52,23 @@ class DftlyGrammar(Transformer):
 
     String interpolation is supported via f-strings:
 
-        >>> DftlyGrammar.parse_str("f'hello {@name}'")
-        {'string_interpolate': [{'literal': 'hello {}'}, '@name']}
+        >>> DftlyGrammar.parse_str("f'hello {$name}'")
+        {'string_interpolate': [{'literal': 'hello {}'}, '$name']}
 
     Conditional expressions can be expressed using the `... if ... else ...` syntax; `else ...` is optional:
 
-        >>> DftlyGrammar.parse_str("'big' if @a > 5")
+        >>> DftlyGrammar.parse_str("'big' if $a > 5")
         {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]}, 'then': {'literal': 'big'}}}
-        >>> DftlyGrammar.parse_str("'big' if @a > 5 else 'small'")
+        >>> DftlyGrammar.parse_str("'big' if $a > 5 else 'small'")
         {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]},
                          'then': {'literal': 'big'},
                          'otherwise': {'literal': 'small'}}}
 
     Regex operations are supported via the following syntax:
 
-        >>> DftlyGrammar.parse_str("extract /\\d+/ from @text")
+        >>> DftlyGrammar.parse_str("extract /\\d+/ from $text")
         {'regex_extract': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
-        >>> DftlyGrammar.parse_str("/\\d+/ in @text")
+        >>> DftlyGrammar.parse_str("/\\d+/ in $text")
         {'regex_match': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
 
     Casting is supported via the `::` or `... as ...` syntax. Note the two have different precedence, with
@@ -118,8 +118,8 @@ class DftlyGrammar(Transformer):
         return str(token)
 
     def column(self, items: list[str]) -> dict:
-        """Resolve the "@column_name" syntax into a column node."""
-        at_sign, column_name = items
+        """Resolve the "$column_name" syntax into a column node."""
+        _, column_name = items
         return Column.from_lark(column_name)
 
     def binary_expr(self, items: list[dict | str]) -> dict:

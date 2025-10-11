@@ -63,14 +63,14 @@ with dftly, we can write a yaml file like this:
 
 ```python
 >>> ops = r"""
-... sum: "@col1 + @col2"
-... diff: "@foo::int - @col1"
-... compare: "@col1 > (@col2 - 3) * 3"
-... str_interp: 'f"value: {@foo} {@col1}"'
-... max: "max(@col1, @col2)"
-... conditional: '"big" if @col1 > 1 else "small"'
-... sys_bp: "extract group 1 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
-... dia_bp: "(extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp) as float"
+... sum: "$col1 + $col2"
+... diff: "$foo::int - $col1"
+... compare: "$col1 > ($col2 - 3) * 3"
+... str_interp: 'f"value: {$foo} {$col1}"'
+... max: "max($col1, $col2)"
+... conditional: '"big" if $col1 > 1 else "small"'
+... sys_bp: "extract group 1 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp"
+... dia_bp: "(extract group 2 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp) as float"
 ... """
 
 ```
@@ -97,8 +97,8 @@ more:
 
 ```python
 >>> ops = r"""
-... as_date: '@col3::"%Y-%m-%d"'
-... days_later: '(@col3 as "%Y-%m-%d") + @col1::days'
+... as_date: '$col3::"%Y-%m-%d"'
+... days_later: '($col3 as "%Y-%m-%d") + $col1::days'
 ... """
 >>> df.select(**Parser.to_polars(ops))
 shape: (2, 2)
@@ -121,14 +121,14 @@ the below is equivalent to the above:
 
 ```python
 >>> ops = {
-...     "sum": "@col1 + @col2",
-...     "diff": "@col2 - @col1",
-...     "compare": "@col1 > (@col2 - 3) * 3",
-...     "str_interp": 'f"value: {@foo} {@col1}"',
-...     "max": "max(@col1, @col2)",
-...     "conditional": '"big" if @col1 > 1 else "small"',
-...     "sys_bp": r"extract group 1 of /(\d+)\/(\d+)/ from @bp if /(\d+)\/(\d+)/ in @bp",
-...     "dia_bp": r"extract group 2 of /(\d+)\/(\d+)/ from @bp if /(\d+)\/(\d+)/ in @bp",
+...     "sum": "$col1 + $col2",
+...     "diff": "$col2 - $col1",
+...     "compare": "$col1 > ($col2 - 3) * 3",
+...     "str_interp": 'f"value: {$foo} {$col1}"',
+...     "max": "max($col1, $col2)",
+...     "conditional": '"big" if $col1 > 1 else "small"',
+...     "sys_bp": r"extract group 1 of /(\d+)\/(\d+)/ from $bp if /(\d+)\/(\d+)/ in $bp",
+...     "dia_bp": r"extract group 2 of /(\d+)\/(\d+)/ from $bp if /(\d+)\/(\d+)/ in $bp",
 ... }
 >>> from dftly import Parser
 >>> parser = Parser()
@@ -153,15 +153,15 @@ precise syntax:
 
 ```python
 >>> ops = r"""
-... sum: # "@col1 + @col2"
+... sum: # "$col1 + $col2"
 ...   add:
 ...     - column: col1
 ...     - column: col2
-... diff: # "@col2 - @col1"
+... diff: # "$col2 - $col1"
 ...   subtract:
 ...     - column: col2
 ...     - column: col1
-... compare: # "@col1 > (@col2 - 3) * 3"
+... compare: # "$col1 > ($col2 - 3) * 3"
 ...   greater_than:
 ...     - column: col1
 ...     - multiply:
@@ -169,16 +169,16 @@ precise syntax:
 ...             - column: col2
 ...             - literal: 3
 ...         - literal: 3
-... str_interp: # 'f"value: {@foo} {@col1}"'
+... str_interp: # 'f"value: {$foo} {$col1}"'
 ...   string_interpolate:
 ...     - literal: "value: {} {}"
 ...     - column: foo
 ...     - column: col1
-... max: # "max(@col1, @col2)"
+... max: # "max($col1, $col2)"
 ...   max:
 ...     - column: col1
 ...     - column: col2
-... conditional: # '"big" if @col1 > 1 else "small"'
+... conditional: # '"big" if $col1 > 1 else "small"'
 ...   conditional:
 ...     when:
 ...       greater_than:
@@ -188,7 +188,7 @@ precise syntax:
 ...       literal: "big"
 ...     otherwise:
 ...       literal: "small"
-... sys_bp: # "extract group 1 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+... sys_bp: # "extract group 1 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp"
 ...   conditional:
 ...     when:
 ...       regex_match:
@@ -204,7 +204,7 @@ precise syntax:
 ...           literal: (\d+)\/(\d+)
 ...         source:
 ...           column: bp
-... dia_bp: # "extract group 2 of /(\\d+)\\/(\\d+)/ from @bp if /(\\d+)\\/(\\d+)/ in @bp"
+... dia_bp: # "extract group 2 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp"
 ...   conditional:
 ...     when:
 ...       regex_match:
