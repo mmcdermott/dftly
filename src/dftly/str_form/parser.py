@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from importlib.resources import files
-from lark import Lark, Transformer
+from lark import Lark, Token, Transformer
 from lark.visitors import Discard
 
 from ..nodes import (
@@ -148,38 +148,16 @@ class DftlyGrammar(Transformer):
 
         return StringInterpolate.from_lark(pattern)
 
-    def IF(self, token: str):
+    def _discard_token(self, _: Token) -> Discard:
         return Discard
 
-    def ELSE(self, token: str):
-        return Discard
+    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
 
     def conditional_expr(self, items: list[Any]) -> dict:
         return Conditional.from_lark(items)
 
-    def EXTRACT(self, token: str):
-        return Discard
-
-    def GROUP(self, token: str):
-        return Discard
-
-    def OF(self, token: str):
-        return Discard
-
-    def FROM(self, token: str):
-        return Discard
-
-    def IN(self, token: str):
-        return Discard
-
     def REGEX_LITERAL(self, token: str) -> str:
         return Literal.from_lark(str(token[1:-1]))
-
-    def CAST(self, token: str):
-        return Discard
-
-    def AS(self, token: str):
-        return Discard
 
     def regex_extract(self, items: list[Any]) -> dict:
         return RegexExtract.from_lark(items)
