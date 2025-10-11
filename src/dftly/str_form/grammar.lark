@@ -67,6 +67,7 @@ AGAINST.2: /against/i
                | local_cast
 
 ?local_cast: unary CAST NAME   -> cast_expr
+           | unary CAST STRING -> strptime
            | unary
 
 ?unary: (NOT_SYM|NOT) unary   -> unary_expr
