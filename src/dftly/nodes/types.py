@@ -1,5 +1,6 @@
 """Nodes relating to type casting."""
 
+from typing import Callable
 from .base import BinaryOp, NodeBase
 import polars as pl
 
@@ -41,18 +42,43 @@ DATE_TIME_TYPES: dict[str, pl.DataType] = {
     "time": pl.Time,
 }
 
+# Implicit types
+
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE
+SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR
+SECONDS_PER_YEAR = 365.25 * SECONDS_PER_DAY
+SECONDS_PER_MONTH = SECONDS_PER_YEAR / 12
+
+IMPLICIT_DURATION_TYPES: dict[str, Callable[[pl.Expr], pl.Expr]] = {
+    "seconds": lambda x: pl.duration(seconds=x),
+    "minutes": lambda x: pl.duration(minutes=x),
+    "hours": lambda x: pl.duration(hours=x),
+    "days": lambda x: pl.duration(days=x),
+    "weeks": lambda x: pl.duration(weeks=x),
+    "months": lambda x: pl.duration(seconds=(SECONDS_PER_MONTH * x)),
+    "years": lambda x: pl.duration(seconds=(SECONDS_PER_YEAR * x)),
+}
+
 TYPES: dict[str, pl.DataType] = {}
 TYPES.update(NUMERIC_TYPES)
 TYPES.update(BOOLEAN_TYPES)
 TYPES.update(STRING_TYPES)
 TYPES.update(DATE_TIME_TYPES)
+TYPES.update({k: pl.Duration for k in IMPLICIT_DURATION_TYPES})
 
 
 class Cast(BinaryOp):
     """This non-terminal node casts the left expression to the type specified by the right expression.
 
     The right node of this expression must evaluate to a string literal outside of any specific polars context
-    that is one of the supported types defined in the `TYPES` dictionary.
+    that is one of the supported types defined in the `TYPES` dictionary. Most of the supported types are
+    standard polars types, but some common aliases are also supported (e.g. "int" for "Int32", "float" for
+    "Float32", and "str" for "Utf8").
+
+    In addition, some custom types are added which resolve to standard polars types through a more complex
+    mapping; in particular:
+
 
     Example:
         >>> from dftly.nodes import Literal
@@ -63,6 +89,26 @@ class Cast(BinaryOp):
         <class 'int'>
         >>> out
         3
+
+    This class can also be used to convert numeric types into duration types by specifying their unit:
+
+        >>> pl.select(Cast(Literal(3), Literal("days")).polars_expr).item()
+        datetime.timedelta(days=3)
+        >>> pl.select(Cast(Literal(3), Literal("minutes")).polars_expr).item()
+        datetime.timedelta(seconds=180)
+
+    This will work so long as polars understands such a conversion, which can include, e.g., direct string to
+    duration conversion:
+
+        >>> pl.select(Cast(Literal("4"), Literal("weeks")).polars_expr).item()
+        datetime.timedelta(days=28)
+
+    Months and years are approximated as 30.4375 days and 365.25 days, respectively:
+
+        >>> pl.select(Cast(Literal(1.5), Literal("years")).polars_expr).item()
+        datetime.timedelta(days=547, seconds=75600)
+        >>> pl.select(Cast(Literal(-0.1), Literal("months")).polars_expr).item()
+        datetime.timedelta(days=-4, seconds=82620)
     """
 
     KEY = "cast"
@@ -87,4 +133,7 @@ class Cast(BinaryOp):
 
     @property
     def polars_expr(self) -> pl.Expr:
-        return self.input.polars_expr.cast(TYPES[self.output_type])
+        if self.output_type in IMPLICIT_DURATION_TYPES:
+            return IMPLICIT_DURATION_TYPES[self.output_type](self.input.polars_expr)
+        else:
+            return self.input.polars_expr.cast(TYPES[self.output_type])

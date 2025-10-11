@@ -92,22 +92,24 @@ shape: (2, 8)
 
 ```
 
-Other supported operations include string to time parsing.
+Other supported operations include string to time parsing, conversion to duration, datetime arithmetic, and
+more:
 
 ```python
 >>> ops = r"""
 ... as_date: '@col3 as "%Y-%m-%d"'
+... days_later: '(@col3 as "%Y-%m-%d") + @col1::days'
 ... """
 >>> df.select(**Parser.to_polars(ops))
-shape: (2, 1)
-┌────────────┐
-│ as_date    │
-│ ---        │
-│ date       │
-╞════════════╡
-│ 2020-01-01 │
-│ 2021-06-15 │
-└────────────┘
+shape: (2, 2)
+┌────────────┬────────────┐
+│ as_date    ┆ days_later │
+│ ---        ┆ ---        │
+│ date       ┆ date       │
+╞════════════╪════════════╡
+│ 2020-01-01 ┆ 2020-01-02 │
+│ 2021-06-15 ┆ 2021-06-17 │
+└────────────┴────────────┘
 
 ```
 
