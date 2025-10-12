@@ -60,12 +60,17 @@ IMPLICIT_DURATION_TYPES: dict[str, Callable[[pl.Expr], pl.Expr]] = {
     "years": lambda x: pl.duration(seconds=(SECONDS_PER_YEAR * x)),
 }
 
+IMPLICIT_DATE_TYPES: dict[str, Callable[[pl.Expr], pl.Expr]] = {
+    "year": lambda x: pl.date(year=x, month=1, day=1),
+}
+
 TYPES: dict[str, pl.DataType] = {}
 TYPES.update(NUMERIC_TYPES)
 TYPES.update(BOOLEAN_TYPES)
 TYPES.update(STRING_TYPES)
 TYPES.update(DATE_TIME_TYPES)
 TYPES.update({k: pl.Duration for k in IMPLICIT_DURATION_TYPES})
+TYPES.update({k: pl.Date for k in IMPLICIT_DATE_TYPES})
 
 
 class Cast(BinaryOp):
@@ -109,6 +114,12 @@ class Cast(BinaryOp):
         datetime.timedelta(days=547, seconds=75600)
         >>> pl.select(Cast(Literal(-0.1), Literal("months")).polars_expr).item()
         datetime.timedelta(days=-4, seconds=82620)
+
+    Similarly, numeric types can be converted into date types by specifying the unit as "year", which will
+    create a date at the start of that year:
+
+        >>> pl.select(Cast(Literal(2023), Literal("year")).polars_expr).item()
+        datetime.date(2023, 1, 1)
     """
 
     KEY = "cast"
@@ -135,5 +146,7 @@ class Cast(BinaryOp):
     def polars_expr(self) -> pl.Expr:
         if self.output_type in IMPLICIT_DURATION_TYPES:
             return IMPLICIT_DURATION_TYPES[self.output_type](self.input.polars_expr)
+        elif self.output_type in IMPLICIT_DATE_TYPES:
+            return IMPLICIT_DATE_TYPES[self.output_type](self.input.polars_expr)
         else:
             return self.input.polars_expr.cast(TYPES[self.output_type])
