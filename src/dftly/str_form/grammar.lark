@@ -1,7 +1,16 @@
 %import common.WS
 %ignore WS
-STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
 
+// Literals
+STRING: /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/
+INT: /\d+/
+NUMBER: /\d+(?:\.\d+)?/
+BOOL.1: "true"i | "false"i
+TIME.1: /[0-2]?\d:[0-5]\d(:[0-5]\d)?( [AP](\.)?M(\.)?)?/i
+DATE.1: /\d{4}-\d{2}-\d{2}/
+DATETIME.1: /\d{4}-\d{2}-\d{2}[ T][0-2]?\d:[0-5]\d(:[0-5]\d)?( [AP](\.)?M(\.)?)?/i
+
+// Operators
 PLUS: "+"
 MINUS: "-"
 TIMES: "*"
@@ -15,21 +24,21 @@ LE: "<="
 GT: ">"
 LT: "<"
 CAST: "::"
+AND_SYM: "&&"
+OR_SYM: "||"
+NOT_SYM: "!"
+
+// Keywords
 FORMAT_PFX: "f"
 AS: /as/i
 IF: /if/i
 ELSE: /else/i
-AND_SYM: "&&"
-OR_SYM: "||"
-NOT_SYM: "!"
 NOT_MATCH.2: /not\s+match/i
 AND.2: "and"i
 OR.2: "or"i
 NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
 IN: /in/i
-INT: /\d+/
-NUMBER: /\d+(?:\.\d+)?/
 REGEX_LITERAL: /\/([^\/\\\n]|\\.)*\//
 LPAR: "("
 RPAR: ")"
@@ -37,8 +46,6 @@ EXTRACT.2: /extract/i
 GROUP.2: /group/i
 OF.2: /of/i
 FROM.2: /from/i
-MATCH.2: /match/i
-AGAINST.2: /against/i
 
 ?start: expr
 
@@ -86,6 +93,10 @@ AGAINST.2: /against/i
         | call_expr
         | (DOLLAR)NAME -> column
         | (FORMAT_PFX)STRING -> format_string
+        | TIME
+        | DATE
+        | DATETIME
         | NUMBER
+        | BOOL
         | STRING
         | paren_group

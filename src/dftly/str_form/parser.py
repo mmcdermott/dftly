@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+from dateutil import parser as dt_parser
+
 
 from importlib.resources import files
 from lark import Lark, Token, Transformer
@@ -33,12 +35,31 @@ class DftlyGrammar(Transformer):
     Examples:
         >>> DftlyGrammar.parse_str("1 + 2 * 3")
         {'add': [1, {'multiply': [2, 3]}]}
+        >>> DftlyGrammar.parse_str("2023 - 01 - 01")
+        {'subtract': [{'subtract': [2023, 1]}, 1]}
         >>> DftlyGrammar.parse_str("1 / (2 + 3) > 0.1")
         {'greater_than': [{'divide': [1, {'add': [2, 3]}]}, 0.1]}
         >>> DftlyGrammar.parse_str("5 == 2 + 3 and 4 < 10")
         {'and': [{'equal': [5, {'add': [2, 3]}]}, {'less_than': [4, 10]}]}
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
         {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
+
+    Various literal types are supported:
+
+        >>> DftlyGrammar.parse_str("1")
+        1
+        >>> DftlyGrammar.parse_str("3.14")
+        3.14
+        >>> DftlyGrammar.parse_str("true")
+        True
+        >>> DftlyGrammar.parse_str("'hello'")
+        {'literal': 'hello'}
+        >>> DftlyGrammar.parse_str("11:32 a.m.")
+        {'literal': datetime.time(11, 32)}
+        >>> DftlyGrammar.parse_str("2023-01-01")
+        {'literal': datetime.date(2023, 1, 1)}
+        >>> DftlyGrammar.parse_str("2023-01-01 12:34:56")
+        {'literal': datetime.datetime(2023, 1, 1, 12, 34, 56)}
 
     You can also express columns using the `"$column_name"` syntax:
 
@@ -100,14 +121,26 @@ class DftlyGrammar(Transformer):
 
         return cls().transform(tree)
 
+    def INT(self, token: str) -> int:
+        return int(token)
+
     def NUMBER(self, token: str) -> dict:
         if "." in token or "e" in token or "E" in token:
             return float(token)
         else:
             return int(token)
 
-    def INT(self, token: str) -> int:
-        return int(token)
+    def BOOL(self, token: str) -> bool:
+        return token.lower() == "true"
+
+    def TIME(self, token: str) -> str:
+        return Literal.from_lark(dt_parser.parse(str(token)).time())
+
+    def DATE(self, token: str) -> str:
+        return Literal.from_lark(dt_parser.parse(str(token)).date())
+
+    def DATETIME(self, token: str) -> str:
+        return Literal.from_lark(dt_parser.parse(str(token)))
 
     def STRING(self, token: str) -> str:
         """Remove the surrounding quotes from a string token."""

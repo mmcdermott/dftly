@@ -16,7 +16,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["PyYAML", "lark", "python-dateutil", "polars~=1.33.0"]
+dependencies = [
+    "PyYAML",
+    "lark",
+    "python-dateutil",
+    "polars~=1.33.0",
+]
 
 [dependency-groups]
 dev = [

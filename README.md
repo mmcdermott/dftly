@@ -113,6 +113,30 @@ shape: (2, 2)
 
 ```
 
+You can also add literal columns:
+
+```python
+>>> ops = r"""
+... str: '"hello"'
+... int: '42'
+... float: '3.14'
+... bool: 'true'
+... time: '11:30 a.m.'
+... date: '2024-01-01'
+... datetime: '2024-01-01 11:30 a.m.'
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (1, 7)
+┌───────┬─────┬───────┬──────┬──────────┬────────────┬─────────────────────┐
+│ str   ┆ int ┆ float ┆ bool ┆ time     ┆ date       ┆ datetime            │
+│ ---   ┆ --- ┆ ---   ┆ ---  ┆ ---      ┆ ---        ┆ ---                 │
+│ str   ┆ i32 ┆ f64   ┆ bool ┆ time     ┆ date       ┆ datetime[μs]        │
+╞═══════╪═════╪═══════╪══════╪══════════╪════════════╪═════════════════════╡
+│ hello ┆ 42  ┆ 3.14  ┆ true ┆ 11:30:00 ┆ 2024-01-01 ┆ 2024-01-01 11:30:00 │
+└───────┴─────┴───────┴──────┴──────────┴────────────┴─────────────────────┘
+
+```
+
 ## Detailed Documentation
 
 Internally, this simply parses the yaml file into a mapping, then treats the mapping as a map from desired
