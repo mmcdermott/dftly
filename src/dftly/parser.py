@@ -1,433 +1,212 @@
-from __future__ import annotations
+from .nodes.base import NodeBase
+from pathlib import Path
+import polars as pl
+from .nodes import NODES
+import inspect
+from typing import Any
+from collections import defaultdict
+from .str_form.parser import DftlyGrammar
+import yaml
 
-from typing import Any, Dict, Mapping, Optional
-import re
-from datetime import datetime
-from dateutil import parser as dtparser
-import string
-
-from importlib.resources import files
-from lark import Lark, Transformer
-from lark.exceptions import LarkError, VisitError
-from .expressions import ExpressionRegistry
-from .nodes import Column, Expression, Literal
-
-# ---------------------------------------------------------------------------
-# Constants and regex patterns for timestamp parsing
-
-MONTHS = {
-    "january": 1,
-    "february": 2,
-    "march": 3,
-    "april": 4,
-    "may": 5,
-    "june": 6,
-    "july": 7,
-    "august": 8,
-    "september": 9,
-    "october": 10,
-    "november": 11,
-    "december": 12,
-}
-
-DATE_TIME_RE = re.compile(
-    r"^(?P<month>[A-Za-z]+)\s+(?P<day>\d{1,2}),\s*(?P<time>.+)$",
-    re.IGNORECASE,
-)
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 
 
 class Parser:
-    """Parse simplified YAML-like structures into dftly nodes."""
+    """A parser parses a yaml value into a Node object within a set of registered nodes.
 
-    def __init__(
-        self, input_schema: Optional[Mapping[str, Optional[str]]] = None
-    ) -> None:
-        self.input_schema = dict(input_schema or {})
-        grammar_text = files(__package__).joinpath("grammar.lark").read_text()
-        self._lark = Lark(grammar_text, parser="lalr")
-        self._transformer = DftlyTransformer(self)
+    This is intended to be used within a single YAML value; however, node arguments will often be recursive
+    given they will be other nodes, that will be parsed in turn by this object. Some limited validation of the
+    registered nodes is performed at initialization, including validation that the node keys (used to match
+    nodes to yaml values) are unique and that all registered nodes are subclasses of NodeBase. The parser is
+    used like a function through its `__call__` method, which takes a single value and returns a single node.
 
-    def parse(self, data: Mapping[str, Any]) -> Dict[str, Any]:
-        if not isinstance(data, Mapping):
-            raise TypeError("top level data must be a mapping")
-        return {key: self._parse_value(value) for key, value in data.items()}
+    Args:
+        registered_nodes: A dictionary mapping node names to NodeBase subclasses. These nodes will be
+          considered when parsing a value.
 
-    # ------------------------------------------------------------------
-    def _parse_value(self, value: Any) -> Any:
-        if isinstance(value, Mapping):
-            return self._parse_mapping(value)
-        if isinstance(value, list):
-            # default behaviour: COALESCE
-            return Expression("COALESCE", [self._parse_value(v) for v in value])
-        if isinstance(value, (int, float, bool)):
-            return Literal(value)
+    Raises:
+        TypeError: If any registered node is not a subclass of NodeBase.
+        ValueError: If multiple registered nodes share the same KEY.
+        ValueError: If no registered nodes match the input value, multiple registered nodes match the input
+          value, or if a matching node raises an error during parsing.
+
+    Returns:
+        A NodeBase subclass instance parsed from the input value.
+
+    Examples:
+        >>> from dftly.nodes import Add, Multiply, Subtract, Literal
+        >>> parser = Parser({'add': Add, 'multiply': Multiply, 'subtract': Subtract, 'literal': Literal})
+        >>> node = parser({'add': [1, {'multiply': [2, 3]}]})
+        >>> node
+        Add(Literal(1), Multiply(Literal(2), Literal(3)))
+        >>> pl.select(node.polars_expr).item()
+        7
+        >>> node = parser({'subtract': [10, {'add': [2, 3, 4]}]})
+        >>> node
+        Subtract(Literal(10), Add(Literal(2), Literal(3), Literal(4)))
+        >>> pl.select(node.polars_expr).item()
+        1
+
+    The parser can also handle node class objects in the value directly:
+
+        >>> node = parser({'add': [1, Literal(2)]})
+        >>> node
+        Add(Literal(1), Literal(2))
+        >>> pl.select(node.polars_expr).item()
+        3
+
+    Strings route to the string parser via the `DftlyGrammar` class, though this class does resolve quoted
+    strings into string literals:
+
+        >>> node = parser("1 + 2 * 3")
+        >>> node
+        Add(Literal(1), Multiply(Literal(2), Literal(3)))
+        >>> pl.select(node.polars_expr).item()
+        7
+        >>> node = parser("'foo'")
+        >>> node
+        Literal('foo')
+        >>> pl.select(node.polars_expr).item()
+        'foo'
+
+    The parser parses nodes recursively:
+
+        >>> node = parser({'add': ['"foo"', '"bar"']})
+        >>> node
+        Add(Literal('foo'), Literal('bar'))
+        >>> pl.select(node.polars_expr).item()
+        'foobar'
+        >>> node = parser({'add': ["1 * 2", "2 - 3"]})
+        >>> node
+        Add(Multiply(Literal(1), Literal(2)), Subtract(Literal(2), Literal(3)))
+        >>> pl.select(node.polars_expr).item()
+        1
+
+    If we try to parse a node that depends on something we don't know about, we get an error:
+
+        >>> node = parser({'fake': [2, 3]})
+        Traceback (most recent call last):
+            ...
+        ValueError: No matching node found for value: {'fake': [2, 3]}.
+
+    This also happens within nested nodes, reporting the node that failed:
+
+        >>> node = parser({'add': [1, {'fake': [2, 3]}]})
+        Traceback (most recent call last):
+            ...
+        ValueError: No matching node found for value: {'add': [1, {'fake': [2, 3]}]}.
+        Errors from attempted matches:
+        - add: No matching node found for value: {'fake': [2, 3]}.
+
+    If we pass invalid nodes or duplicate keys, we get errors:
+
+        >>> parser = Parser({'add': Add, 'sum': "hi there"})
+        Traceback (most recent call last):
+            ...
+        TypeError: registered node sum is not a subclass of NodeBase; got hi there
+        >>> parser = Parser({'add': Add, 'sum': Add})
+        Traceback (most recent call last):
+            ...
+        ValueError: multiple nodes registered with key 'add': ['add', 'sum']
+    """
+
+    def __init__(self, registered_nodes: dict[str, NodeBase] = NODES):
+        self.registered_nodes = registered_nodes
+
+        by_key = defaultdict(list)
+
+        for name, node_cls in registered_nodes.items():
+            if not (inspect.isclass(node_cls) and issubclass(node_cls, NodeBase)):
+                raise TypeError(
+                    f"registered node {name} is not a subclass of NodeBase; got {node_cls}"
+                )
+
+            by_key[node_cls.KEY].append(name)
+
+        for key, names in by_key.items():
+            if len(names) > 1:
+                raise ValueError(f"multiple nodes registered with key '{key}': {names}")
+
+    def _matching_nodes(self, value: Any) -> set[str]:
+        matches = set()
+        for name, node_obj in self.registered_nodes.items():
+            if node_obj.matches(value):
+                matches.add(name)
+        return matches
+
+    def __call__(self, value: Any):
+        outputs = {}
+        errors = {}
+
         if isinstance(value, str):
-            return self._parse_string(value)
-        raise TypeError(f"unsupported type: {type(value).__name__}")
+            value = DftlyGrammar.parse_str(value)
 
-    # ------------------------------------------------------------------
-    def _parse_mapping(self, value: Mapping[str, Any]) -> Any:
-        if "literal" in value:
-            return Literal.from_mapping(value)
+        for node in self._matching_nodes(value):
+            try:
+                node_cls = self.registered_nodes[node]
 
-        if "column" in value:
-            return Column.from_mapping(value, input_schema=self.input_schema)
+                if isinstance(value, node_cls):
+                    outputs[node] = value
+                else:
+                    args, kwargs = node_cls.args_from_value(value)
 
-        if "expression" in value:
-            return Expression.from_mapping(value, parser=self)
-        # dictionary short form for expressions
-        if len(value) == 1:
-            expr_type, args = next(iter(value.items()))
-            registry_expr = ExpressionRegistry.create_from_mapping(
-                self, expr_type, args
-            )
-            if registry_expr is not None:
-                return registry_expr
+                    if not node_cls.is_terminal:
+                        args = [self(arg) for arg in args]
+                        kwargs = {k: self(v) for k, v in kwargs.items()}
 
-        # generic mapping value
-        return {k: self._parse_value(v) for k, v in value.items()}
+                    outputs[node] = node_cls(*args, **kwargs)
+            except Exception as e:
+                errors[node] = e
 
-    # ------------------------------------------------------------------
-    def _parse_arguments(self, args: Any) -> Any:
-        if isinstance(args, Mapping):
-            return {k: self._parse_value(v) for k, v in args.items()}
-        if isinstance(args, list):
-            return [self._parse_value(a) for a in args]
-        return self._parse_value(args)
+        if not outputs:
+            err_lines = [f"No matching node found for value: {value}."]
+            if errors:
+                err_lines.append("Errors from attempted matches:")
+                for name, err in errors.items():
+                    err_lines.append(f"- {name}: {err}")
+            raise ValueError("\n".join(err_lines))
+        if len(outputs) > 1:
+            raise ValueError(f"multiple matching nodes for {node}: {list(outputs)}")
+        return next(iter(outputs.values()))
 
-    # ------------------------------------------------------------------
+    @classmethod
+    def to_polars(cls, yaml_file: str | Path) -> dict[str, pl.Expr]:
+        """Parse a YAML file into a dictionary of Polars expressions."""
+        parser = cls()
 
-    def _parse_string(self, value: str) -> Any:
-        try:
-            tree = self._lark.parse(value)
-            return self._transformer.transform(tree)
-        except (LarkError, VisitError):
-            pass
-
-        interp = self._parse_string_interpolate(value)
-        if interp is not None:
-            return interp
-
-        if re.search(
-            r"(?:\s[+\-@]\s)|(?:>=|<=|>|<)|(?:&&|\|\||!)|\b(?:as|if|else|and|or|in|not)\b",
-            value,
-            re.IGNORECASE,
-        ):
-            raise ValueError(f"invalid expression syntax: {value!r}")
-
-        return self._as_node(value)
-
-    # ------------------------------------------------------------------
-    def _infer_output_type(self, fmt: str) -> str:
-        time_tokens = ["%H", "%I", "%M", "%S", "%p", "%X", "%T"]
-        date_tokens = ["%Y", "%y", "%m", "%d", "%b", "%B", "%j", "%U", "%W", "%F"]
-        num_tokens = {"%d", "%f", "%i", "%u", "%e", "%g"}
-        # TODO(mmd): %d is duplicated in num and date tokens
-        tokens = [f"%{t}" for t in re.findall(r"%[^A-Za-z]*([A-Za-z])", fmt)]
-        has_time = any(t in tokens for t in time_tokens)
-        has_date = any(t in tokens for t in date_tokens)
-        if tokens and all(t in num_tokens for t in tokens):
-            return "float" if any(t in {"%f", "%e", "%g"} for t in tokens) else "int"
-        if has_time and not has_date:
-            return "duration"
-        return "datetime" if has_time else "date"
-
-    # ------------------------------------------------------------------
-    def _as_node(self, value: Any) -> Any:
-        if isinstance(value, (Expression, Column, Literal)):
-            return value
-        if isinstance(value, str):
-            if value in self.input_schema:
-                return Column(value, self.input_schema.get(value))
-            return Literal(value)
-        raise TypeError(f"cannot convert {type(value).__name__} to node")
-
-    # ------------------------------------------------------------------
-    def _parse_time_string(self, text: str) -> Optional[Dict[str, Any]]:
-        text = text.strip()
-        if any(month in text.lower() for month in MONTHS):
-            return None
-        try:
-            dt = dtparser.parse(text, default=datetime(1900, 1, 1))
-        except (ValueError, OverflowError):
-            return None
-
-        return {
-            "time": {
-                "hour": Literal(dt.hour),
-                "minute": Literal(dt.minute),
-                "second": Literal(dt.second),
-            }
-        }
-
-    def _parse_datetime_string(self, text: str) -> Optional[Dict[str, Any]]:
-        match = DATE_TIME_RE.match(text.strip())
-        if not match:
-            return None
-        month_name = match.group("month").lower()
-        month = MONTHS.get(month_name)
-        if month is None:
-            return None
-        day = int(match.group("day"))
-        time_part = match.group("time")
-        try:
-            dt = dtparser.parse(time_part, default=datetime(1900, 1, 1))
-        except (ValueError, OverflowError):
-            return None
-        return {
-            "date": {
-                "month": Literal(month),
-                "day": Literal(day),
-            },
-            "time": {
-                "hour": Literal(dt.hour),
-                "minute": Literal(dt.minute),
-                "second": Literal(dt.second),
-            },
-        }
-
-    def _parse_string_interpolate(self, text: str) -> Optional[Expression]:
-        """Parse python string interpolation syntax."""
-        if "{" not in text or "}" not in text:
-            return None
-
-        pieces = list(string.Formatter().parse(text))
-        if not any(field for _, field, _, _ in pieces if field is not None):
-            return None
-
-        inputs: Dict[str, Any] = {}
-        for _, field_name, _, _ in pieces:
-            if field_name is None:
-                continue
-            inputs[field_name] = self._parse_string(field_name)
-
-        return Expression(
-            "STRING_INTERPOLATE",
-            {
-                "pattern": Literal(text),
-                "inputs": inputs,
-            },
-        )
-
-
-class DftlyTransformer(Transformer):
-    """Transform parsed tokens into dftly nodes."""
-
-    def __init__(self, parser: Parser) -> None:
-        super().__init__()
-        self.parser = parser
-
-    def NAME(self, token: Any) -> str:  # type: ignore[override]
-        return str(token)
-
-    def NUMBER(self, token: Any) -> str:  # type: ignore[override]
-        return str(token)
-
-    def STRING(self, token: Any) -> str:  # type: ignore[override]
-        return str(token)
-
-    def number(self, items: list[str]) -> Literal:  # type: ignore[override]
-        (text,) = items
-        if "." in text:
-            val: Any = float(text)
+        if isinstance(yaml_file, str):
+            try:
+                if Path(yaml_file).is_file:
+                    yaml_file = Path(yaml_file).read_text()
+            except Exception:
+                pass
+        elif isinstance(yaml_file, Path):
+            if yaml_file.is_file():
+                yaml_file = yaml_file.read_text()
+            else:
+                raise FileNotFoundError(f"YAML file not found: {yaml_file}")
         else:
-            val = int(text)
-        return Literal(val)
+            raise TypeError(
+                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
+            )
 
-    def name(self, items: list[str]) -> Any:  # type: ignore[override]
-        (val,) = items
-        return self.parser._as_node(val)
+        if not isinstance(yaml_file, str):
+            raise TypeError(
+                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
+            )
 
-    def regex(self, items: list[Any]) -> str:  # type: ignore[override]
-        (val,) = items
-        return str(val)
+        yaml_content = yaml.load(yaml_file, Loader=Loader)
 
-    def string(self, items: list[str]) -> Literal:  # type: ignore[override]
-        import ast
+        if not isinstance(yaml_content, dict):
+            raise ValueError(
+                f"YAML content must be a dictionary at the top level; got {type(yaml_content)}"
+            )
 
-        (text,) = items
-        return Literal(ast.literal_eval(text))
+        exprs = {}
+        for name, value in yaml_content.items():
+            exprs[name] = parser(value).polars_expr.alias(name)
 
-    def paren_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
-    def expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
-    def conditional(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
-    def cast(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("cast", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse cast expression")
-        return result
-
-    def primary(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
-    def arg_list(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
-        return items
-
-    def func(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        name = items[0]
-        args = items[1] if len(items) > 1 else []
-        result = ExpressionRegistry.create_from_tree(
-            "func", self.parser, [], name=name, args=args
-        )
-        if result is not None:
-            return result
-        parsed_args = [self.parser._as_node(a) for a in args]
-        return Expression(str(name).upper(), parsed_args)
-
-    def literal_set(self, items: list[Any]) -> list[Any]:  # type: ignore[override]
-        if not items:
-            return []
-        (vals,) = items
-        return [self.parser._as_node(v) for v in vals]
-
-    def range_inc(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
-        low, high = items
-        return {
-            "min": self.parser._as_node(low),
-            "max": self.parser._as_node(high),
-            "min_inclusive": Literal(True),
-            "max_inclusive": Literal(True),
-        }
-
-    def range_ie(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
-        low, high = items
-        return {
-            "min": self.parser._as_node(low),
-            "max": self.parser._as_node(high),
-            "min_inclusive": Literal(True),
-            "max_inclusive": Literal(False),
-        }
-
-    def range_ei(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
-        low, high = items
-        return {
-            "min": self.parser._as_node(low),
-            "max": self.parser._as_node(high),
-            "min_inclusive": Literal(False),
-            "max_inclusive": Literal(True),
-        }
-
-    def range_exc(self, items: list[Any]) -> Dict[str, Any]:  # type: ignore[override]
-        low, high = items
-        return {
-            "min": self.parser._as_node(low),
-            "max": self.parser._as_node(high),
-            "min_inclusive": Literal(False),
-            "max_inclusive": Literal(False),
-        }
-
-    def regex_extract(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree(
-            "regex_extract", self.parser, items
-        )
-        if result is None:
-            raise ValueError("Unable to parse regex extract expression")
-        return result
-
-    def regex_match(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("regex_match", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse regex match expression")
-        return result
-
-    def value_in_set(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("value_in_set", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse value-in-set expression")
-        return result
-
-    def value_in_range(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree(
-            "value_in_range", self.parser, items
-        )
-        if result is None:
-            raise ValueError("Unable to parse value-in-range expression")
-        return result
-
-    def parse_as_format(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree(
-            "parse_as_format", self.parser, items
-        )
-        if result is None:
-            raise ValueError("Unable to parse formatted parse expression")
-        return result
-
-    def additive(self, items: list[Any]) -> Any:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("additive", self.parser, items)
-        if result is None:
-            if len(items) == 1:
-                return self.parser._as_node(items[0])
-            raise ValueError("Unsupported additive expression")
-        return result
-
-    def and_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("and_expr", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse AND expression")
-        return result
-
-    def or_expr(self, items: list[Any]) -> Any:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("or_expr", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse OR expression")
-        return result
-
-    def not_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("not_expr", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse NOT expression")
-        return result
-
-    def ifexpr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("ifexpr", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse conditional expression")
-        return result
-
-    def resolve_ts(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("resolve_ts", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse RESOLVE_TIMESTAMP expression")
-        return result
-
-    def compare_expr(self, items: list[Any]) -> Expression:  # type: ignore[override]
-        result = ExpressionRegistry.create_from_tree("compare_expr", self.parser, items)
-        if result is None:
-            raise ValueError("Unable to parse comparison expression")
-        return result
-
-    def start(self, items: list[Any]) -> Any:  # type: ignore[override]
-        (item,) = items
-        return item
-
-
-def parse(
-    data: Mapping[str, Any], input_schema: Optional[Mapping[str, Optional[str]]] = None
-) -> Dict[str, Any]:
-    """Parse simplified data into fully resolved form."""
-
-    parser = Parser(input_schema)
-    return parser.parse(data)
-
-
-def from_yaml(
-    yaml_text: str, input_schema: Optional[Mapping[str, Optional[str]]] = None
-) -> Dict[str, Any]:
-    """Parse from a YAML string."""
-
-    import yaml
-
-    data = yaml.safe_load(yaml_text) or {}
-    if not isinstance(data, Mapping):
-        raise TypeError("YAML input must produce a mapping")
-    return parse(data, input_schema)
+        return exprs
