@@ -114,6 +114,11 @@ class DftlyGrammar(Transformer):
                       'source': {'literal': '2023 01 01'}}}
     """
 
+    def _discard_token(self, _: Token) -> Discard:
+        return Discard
+
+    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
+
     @classmethod
     def parse_str(cls, s: str) -> Any:
         """Parse a string into an expression tree."""
@@ -183,11 +188,6 @@ class DftlyGrammar(Transformer):
         f, pattern = items
 
         return StringInterpolate.from_lark(pattern)
-
-    def _discard_token(self, _: Token) -> Discard:
-        return Discard
-
-    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
 
     def conditional_expr(self, items: list[Any]) -> dict:
         return Conditional.from_lark(items)

@@ -20,6 +20,7 @@ from .comparison import (
     GreaterThanOrEqual,
     LessThanOrEqual,
 )
+from .datetime import SetTime
 from .str import StringInterpolate, RegexExtract, RegexMatch, Strptime
 from .conditional import Conditional
 from .types import Cast
@@ -50,6 +51,7 @@ __nodes = [
     Conditional,
     Cast,
     Strptime,
+    SetTime,
 ]
 
 NODES = NodeBase.unique_dict_by_prop(__nodes)

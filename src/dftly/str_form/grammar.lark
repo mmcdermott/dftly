@@ -53,6 +53,7 @@ FROM.2: /from/i
 
 ?global_cast: conditional AS NAME   -> cast_expr
             | conditional AS STRING -> strptime
+            | conditional AT TIME   -> binary_expr
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
