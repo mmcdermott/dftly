@@ -258,3 +258,12 @@ shape: (2, 8)
 └─────┴──────┴─────────┴────────────┴─────┴─────────────┴────────┴────────┘
 
 ```
+
+Note that literals are parsed by the string parser into either (a) a literal of the appropriate type (int,
+float, bool) or into literal nodes which have the syntax `literal: [value]`. In some cases, what looks like a
+string in the string syntax is actually parsed directly to a literal; for example, the syntax
+`$col3::"%Y-%m-%d" @ 11:30 a.m.` features a string literal for the format, but a _time_ literal for the time.
+In this way, using the string syntax is often more concise, as you would need to explicitly construct or cast
+a string to a time were you to use the dictionary syntax. Note that these circumstances can be identified by
+the lack of quotes around the time literal in the string syntax; string literals will always be quoted, things
+without quotes will be interpreted as non-string literals.
