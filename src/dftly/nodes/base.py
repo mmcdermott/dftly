@@ -492,7 +492,22 @@ class _BinaryOp(_ArgsFn):
 
 
 # Terminal Nodes
-class Literal(_UnaryOp):
+class Terminal(NodeBase):
+    """Base class for terminal nodes that do not parse their args into other nodes.
+
+    Terminal nodes expect to receive precisely the arguments they want from lark, not a list of items, so set
+    it directly.
+    """
+
+    is_terminal = True
+
+    @classmethod
+    def from_lark(cls, val: Any) -> dict[str, Any]:
+        """This helper returns a dictionary that will parse into this node from a set of parsed lark args."""
+        return {cls.KEY: val}
+
+
+class Literal(Terminal, _UnaryOp):
     """This node represents a literal value.
 
     The literal value has a special syntax for matching, as generic base-types can be matched to the literal
@@ -500,7 +515,6 @@ class Literal(_UnaryOp):
     """
 
     KEY = "literal"
-    is_terminal = True
     pl_fn = pl.lit
 
     @classmethod
@@ -598,35 +612,36 @@ def _col(x: str) -> pl.Expr:
     return pl.col(x)
 
 
-class Column(_UnaryOp):
+class Column(Terminal, _UnaryOp):
     """This node represents a column in a dataframe."""
 
     KEY = "column"
-    is_terminal = True
     pl_fn = _col
 
 
 # Base classes for more complex non-terminal nodes
-class NestedArgsNode(NodeBase):
+class Nonterminal(NodeBase):
     """Base class for nodes whose positional or keyword arguments must be nested node types.
 
     Examples:
-        >>> class MyNestedArgsNode(NestedArgsNode):
+        >>> class MyNonterminal(Nonterminal):
         ...    KEY = "mynestedargsnode"
         ...    @property
         ...    def polars_expr(self): return pl.lit(42)
         ...    def from_lark(cls, items: list[Any]) -> Any: pass
-        >>> MyNestedArgsNode(Column("foo"), Literal(42), extra=Column("bar"))
-        MyNestedArgsNode(Column('foo'), Literal(42), extra=Column('bar'))
-        >>> MyNestedArgsNode(1, 2)
+        >>> MyNonterminal(Column("foo"), Literal(42), extra=Column("bar"))
+        MyNonterminal(Column('foo'), Literal(42), extra=Column('bar'))
+        >>> MyNonterminal(1, 2)
         Traceback (most recent call last):
             ...
         TypeError: all arguments to mynestedargsnode must be NodeBase instances
-        >>> MyNestedArgsNode(Column("foo"), extra=42)
+        >>> MyNonterminal(Column("foo"), extra=42)
         Traceback (most recent call last):
             ...
         TypeError: all keyword arguments to mynestedargsnode must be str:NodeBase pairs
     """
+
+    is_terminal = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -642,7 +657,7 @@ class NestedArgsNode(NodeBase):
             )
 
 
-class BinaryOp(NestedArgsNode, _BinaryOp):
+class BinaryOp(Nonterminal, _BinaryOp):
     """Base class for non-terminal binary operation nodes.
 
     Requires that all arguments be NodeBase instances and that there be exactly two positional arguments.
@@ -651,7 +666,7 @@ class BinaryOp(NestedArgsNode, _BinaryOp):
     SYM: ClassVar[str | list[str]]
 
 
-class UnaryOp(NestedArgsNode, _UnaryOp):
+class UnaryOp(Nonterminal, _UnaryOp):
     """Base class for non-terminal unary operation nodes.
 
     Requires that all arguments be NodeBase instances and that there be exactly one positional argument.
@@ -660,14 +675,14 @@ class UnaryOp(NestedArgsNode, _UnaryOp):
     SYM: ClassVar[str | list[str]]
 
 
-class ArgsOnlyFn(NestedArgsNode, _ArgsFn):
+class ArgsOnlyFn(Nonterminal, _ArgsFn):
     """Base class for non-terminal nodes that accept only positional arguments.
 
     Requires that all arguments be NodeBase instances and that there be only positional arguments.
     """
 
 
-class KwargsOnlyFn(NestedArgsNode, _KwargsFn):
+class KwargsOnlyFn(Nonterminal, _KwargsFn):
     """Base class for non-terminal nodes that accept only keyword arguments.
 
     Requires that all keyword arguments be str:NodeBase pairs and that there be only keyword arguments.

@@ -86,7 +86,14 @@ class StringInterpolate(ArgsOnlyFn):
         self.fields = [a.polars_expr for a in self.args[1:]]
 
     @classmethod
-    def from_lark(cls, pattern: str | dict) -> dict[str, list]:
+    def from_lark(cls, items: list[str | dict]) -> dict[str, list]:
+        if len(items) != 1:
+            raise ValueError(
+                "StringInterpolate.from_lark only accepts a single argument, which is the pattern string. "
+                f"Got {len(items)} arguments instead: {items}"
+            )
+
+        pattern = items[0]
         if isinstance(pattern, dict):
             if not Literal.matches(pattern):
                 raise ValueError(

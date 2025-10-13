@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from functools import partial
 from dateutil import parser as dt_parser
 
 
@@ -12,13 +13,7 @@ from ..nodes import (
     BINARY_OPS,
     NODES,
     Cast,
-    Column,
-    StringInterpolate,
-    Conditional,
     Literal,
-    RegexExtract,
-    RegexMatch,
-    Strptime,
 )
 
 
@@ -114,11 +109,6 @@ class DftlyGrammar(Transformer):
                       'source': {'literal': '2023 01 01'}}}
     """
 
-    def _discard_token(self, _: Token) -> Discard:
-        return Discard
-
-    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
-
     @classmethod
     def parse_str(cls, s: str) -> Any:
         """Parse a string into an expression tree."""
@@ -126,6 +116,30 @@ class DftlyGrammar(Transformer):
 
         return cls().transform(tree)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for node in NODES.values():
+            if not hasattr(self, node.KEY):
+                self.__setattr__(node.KEY, partial(self._send_items, node_cls=node))
+
+    def _send_items(self, val: list[Any] | Token, node_cls) -> dict[str, Any]:
+        if node_cls.is_terminal and isinstance(val, list):
+            if len(val) != 1:
+                raise ValueError(
+                    f"terminal node {node_cls} received multiple values: {val}"
+                )
+            val = val[0]
+        return node_cls.from_lark(val)
+
+    def _discard_token(self, _: Token) -> Discard:
+        return Discard
+
+    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = FORMAT_PFX = DOLLAR = (
+        _discard_token
+    )
+
+    # Literals
     def INT(self, token: str) -> int:
         return int(token)
 
@@ -139,26 +153,24 @@ class DftlyGrammar(Transformer):
         return token.lower() == "true"
 
     def TIME(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(str(token)).time())
+        return Literal.from_lark(dt_parser.parse(token).time())
 
     def DATE(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(str(token)).date())
+        return Literal.from_lark(dt_parser.parse(token).date())
 
     def DATETIME(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(str(token)))
+        return Literal.from_lark(dt_parser.parse(token))
 
     def STRING(self, token: str) -> str:
         """Remove the surrounding quotes from a string token."""
-        return Literal.from_lark(str(token[1:-1]))
+        return Literal.from_lark(token[1:-1])
 
     def NAME(self, token: str) -> str:
         """Return the name token as a string."""
         return str(token)
 
-    def column(self, items: list[str]) -> dict:
-        """Resolve the "$column_name" syntax into a column node."""
-        _, column_name = items
-        return Column.from_lark(column_name)
+    def REGEX_LITERAL(self, token: str) -> str:
+        return Literal.from_lark(token[1:-1])
 
     def binary_expr(self, items: list[dict | str]) -> dict:
         left, op, right = items
@@ -184,26 +196,6 @@ class DftlyGrammar(Transformer):
 
         return NODES[func_name].from_lark(args)
 
-    def format_string(self, items: list[Any]) -> dict:
-        f, pattern = items
-
-        return StringInterpolate.from_lark(pattern)
-
-    def conditional_expr(self, items: list[Any]) -> dict:
-        return Conditional.from_lark(items)
-
-    def REGEX_LITERAL(self, token: str) -> str:
-        return Literal.from_lark(str(token[1:-1]))
-
-    def regex_extract(self, items: list[Any]) -> dict:
-        return RegexExtract.from_lark(items)
-
-    def regex_match(self, items: list[Any]) -> dict:
-        return RegexMatch.from_lark(items)
-
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
         return Cast.from_lark([input, Literal.from_lark(output_type)])
-
-    def strptime(self, items: list[Any]) -> Any:
-        return Strptime.from_lark(items)

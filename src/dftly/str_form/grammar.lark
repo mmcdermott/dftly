@@ -56,7 +56,7 @@ FROM.2: /from/i
             | conditional AT TIME   -> binary_expr
             | conditional
 
-?conditional: expr IF expr (ELSE expr)?   -> conditional_expr
+?conditional: expr IF expr (ELSE expr)?   -> conditional
             | bool_and
 
 ?bool_and: bool_and (AND_SYM|AND) bool_or   -> binary_expr
@@ -93,7 +93,7 @@ FROM.2: /from/i
 ?primary: regex
         | call_expr
         | (DOLLAR)NAME -> column
-        | (FORMAT_PFX)STRING -> format_string
+        | (FORMAT_PFX)STRING -> string_interpolate
         | TIME
         | DATE
         | DATETIME
