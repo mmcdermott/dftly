@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 from functools import partial
 from dateutil import parser as dt_parser
 
@@ -29,24 +29,26 @@ class DftlyGrammar(Transformer):
 
     Examples:
         >>> DftlyGrammar.parse_str("1 + 2 * 3")
-        {'add': [1, {'multiply': [2, 3]}]}
+        {'add': [{'literal': 1}, {'multiply': [{'literal': 2}, {'literal': 3}]}]}
         >>> DftlyGrammar.parse_str("2023 - 01 - 01")
-        {'subtract': [{'subtract': [2023, 1]}, 1]}
+        {'subtract': [{'subtract': [{'literal': 2023}, {'literal': 1}]}, {'literal': 1}]}
         >>> DftlyGrammar.parse_str("1 / (2 + 3) > 0.1")
-        {'greater_than': [{'divide': [1, {'add': [2, 3]}]}, 0.1]}
+        {'greater_than': [{'divide': [{'literal': 1},
+                                      {'add': [{'literal': 2}, {'literal': 3}]}]}, {'literal': 0.1}]}
         >>> DftlyGrammar.parse_str("5 == 2 + 3 and 4 < 10")
-        {'and': [{'equal': [5, {'add': [2, 3]}]}, {'less_than': [4, 10]}]}
+        {'and': [{'equal': [{'literal': 5}, {'add': [{'literal': 2}, {'literal': 3}]}]},
+                 {'less_than': [{'literal': 4}, {'literal': 10}]}]}
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
-        {'equal': [{'add': [1, {'multiply': [2, 3]}]}, 7]}
+        {'equal': [{'add': [{'literal': 1}, {'multiply': [{'literal': 2}, {'literal': 3}]}]}, {'literal': 7}]}
 
     Various literal types are supported:
 
         >>> DftlyGrammar.parse_str("1")
-        1
+        {'literal': 1}
         >>> DftlyGrammar.parse_str("3.14")
-        3.14
+        {'literal': 3.14}
         >>> DftlyGrammar.parse_str("true")
-        True
+        {'literal': True}
         >>> DftlyGrammar.parse_str("'hello'")
         {'literal': 'hello'}
         >>> DftlyGrammar.parse_str("11:32 a.m.")
@@ -59,7 +61,7 @@ class DftlyGrammar(Transformer):
     You can also express columns using the `"$column_name"` syntax:
 
         >>> DftlyGrammar.parse_str("$a + $b * 3")
-        {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, 3]}]}
+        {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, {'literal': 3}]}]}
 
     Strings will be parsed into string nodes:
 
@@ -74,9 +76,10 @@ class DftlyGrammar(Transformer):
     Conditional expressions can be expressed using the `... if ... else ...` syntax; `else ...` is optional:
 
         >>> DftlyGrammar.parse_str("'big' if $a > 5")
-        {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]}, 'then': {'literal': 'big'}}}
+        {'conditional': {'when': {'greater_than': [{'column': 'a'}, {'literal': 5}]},
+                         'then': {'literal': 'big'}}}
         >>> DftlyGrammar.parse_str("'big' if $a > 5 else 'small'")
-        {'conditional': {'when': {'greater_than': [{'column': 'a'}, 5]},
+        {'conditional': {'when': {'greater_than': [{'column': 'a'}, {'literal': 5}]},
                          'then': {'literal': 'big'},
                          'otherwise': {'literal': 'small'}}}
 
@@ -91,7 +94,7 @@ class DftlyGrammar(Transformer):
     `::` having higher precedence than arithmetic operations, and `as` having lower precedence.
 
         >>> DftlyGrammar.parse_str("4 + '3'::int")
-        {'add': [4, {'cast': [{'literal': '3'}, {'literal': 'int'}]}]}
+        {'add': [{'literal': 4}, {'cast': [{'literal': '3'}, {'literal': 'int'}]}]}
         >>> DftlyGrammar.parse_str("'2023-' + '01-' + '01' as date")
         {'cast': [{'add': [{'add': [{'literal': '2023-'},
                                     {'literal': '01-'}]},
@@ -116,12 +119,32 @@ class DftlyGrammar(Transformer):
 
         return cls().transform(tree)
 
+    LITERAL_PARSERS = {
+        "INT": int,
+        "NUMBER": lambda x: float(x) if "." in x or "e" in x.lower() else int(x),
+        "BOOL": lambda x: x.lower() == "true",
+        "TIME": lambda x: dt_parser.parse(x).time(),
+        "DATE": lambda x: dt_parser.parse(x).date(),
+        "DATETIME": dt_parser.parse,
+        "STRING": lambda x: x[1:-1],  # Remove surrounding quotes
+        "REGEX_LITERAL": lambda x: x[1:-1],  # Remove surrounding
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         for node in NODES.values():
             if not hasattr(self, node.KEY):
                 self.__setattr__(node.KEY, partial(self._send_items, node_cls=node))
+
+        for lit, fn in self.LITERAL_PARSERS.items():
+            self.__setattr__(lit, partial(self._parse_literal, fn=fn))
+
+    def _parse_literal(self, token: Token, fn: Callable[[str], Any]) -> dict[str, Any]:
+        try:
+            return Literal.from_lark(fn(token))
+        except Exception as e:
+            raise ValueError(f"Failed to parse literal {token}") from e
 
     def _send_items(self, val: list[Any] | Token, node_cls) -> dict[str, Any]:
         if node_cls.is_terminal and isinstance(val, list):
@@ -139,38 +162,11 @@ class DftlyGrammar(Transformer):
         _discard_token
     )
 
-    # Literals
-    def INT(self, token: str) -> int:
-        return int(token)
+    def NAME(self, val: Token) -> str:
+        return str(val)
 
-    def NUMBER(self, token: str) -> dict:
-        if "." in token or "e" in token or "E" in token:
-            return float(token)
-        else:
-            return int(token)
-
-    def BOOL(self, token: str) -> bool:
-        return token.lower() == "true"
-
-    def TIME(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(token).time())
-
-    def DATE(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(token).date())
-
-    def DATETIME(self, token: str) -> str:
-        return Literal.from_lark(dt_parser.parse(token))
-
-    def STRING(self, token: str) -> str:
-        """Remove the surrounding quotes from a string token."""
-        return Literal.from_lark(token[1:-1])
-
-    def NAME(self, token: str) -> str:
-        """Return the name token as a string."""
-        return str(token)
-
-    def REGEX_LITERAL(self, token: str) -> str:
-        return Literal.from_lark(token[1:-1])
+    def args(self, items: list[Any]) -> list[Any]:
+        return items
 
     def binary_expr(self, items: list[dict | str]) -> dict:
         left, op, right = items
@@ -181,9 +177,6 @@ class DftlyGrammar(Transformer):
             )
 
         return BINARY_OPS[op].from_lark([left, right])
-
-    def args(self, items: list[Any]) -> list[Any]:
-        return items
 
     def func(self, items: list[Any]) -> dict:
         func_name = items[0]
