@@ -326,8 +326,8 @@ class NodeBase(ABC):
         Examples:
             >>> from dftly.nodes.base import Column, Literal
             >>> from dftly.nodes.arithmetic import Add, Multiply
-            >>> Add(Column("a"), Multiply(Column("b"), Literal(3))).referenced_columns
-            {'a', 'b'}
+            >>> sorted(Add(Column("a"), Multiply(Column("b"), Literal(3))).referenced_columns)
+            ['a', 'b']
             >>> Literal(42).referenced_columns
             set()
             >>> Column("x").referenced_columns

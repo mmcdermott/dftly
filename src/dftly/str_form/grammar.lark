@@ -3,8 +3,8 @@
 // Precedence (lowest to highest):
 //   1. global_cast   — `... as type` / `... as '%fmt'` / `... @ TIME`
 //   2. conditional    — `... if ... else ...`
-//   3. bool_and       — `and`, `&&`
-//   4. bool_or        — `or`, `||`
+//   3. bool_or        — `or`, `||`
+//   4. bool_and       — `and`, `&&`  (AND binds tighter than OR, as in Python/SQL/C)
 //   5. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
 //   6. additive       — `+`, `-`
 //   7. multiplicative — `*`, `/`
@@ -80,13 +80,13 @@ FROM.2: /from/i
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional
-            | bool_and
+            | bool_or
 
-?bool_and: bool_and (AND_SYM|AND) bool_or   -> binary_expr
-         | bool_or
+?bool_or: bool_or (OR_SYM|OR) bool_and   -> binary_expr
+        | bool_and
 
-?bool_or: bool_or (OR_SYM|OR) comparison   -> binary_expr
-        | comparison
+?bool_and: bool_and (AND_SYM|AND) comparison   -> binary_expr
+         | comparison
 
 ?comparison: additive (NE|EQ|GE|LE|GT|LT) additive   -> binary_expr
            | additive

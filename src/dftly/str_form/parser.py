@@ -42,6 +42,11 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("equal(add(1, multiply(2, 3)), 7)")
         {'equal': [{'add': [{'literal': 1}, {'multiply': [{'literal': 2}, {'literal': 3}]}]}, {'literal': 7}]}
 
+    AND binds tighter than OR (standard precedence), so ``a or b and c`` parses as ``a or (b and c)``:
+
+        >>> DftlyGrammar.parse_str("true or false and false")
+        {'or': [{'literal': True}, {'and': [{'literal': False}, {'literal': False}]}]}
+
     Various literal types are supported:
 
         >>> DftlyGrammar.parse_str("1")

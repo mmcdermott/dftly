@@ -144,6 +144,7 @@ class Cast(BinaryOp):
     SYM = "::"
 
     def __post_init__(self):
+        super().__post_init__()
         if self.output_type not in TYPES:
             raise ValueError(f"Unsupported type: {self.output_type}")
 

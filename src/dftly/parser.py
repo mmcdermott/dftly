@@ -10,9 +10,9 @@ from .str_form.parser import DftlyGrammar
 import yaml
 
 try:
-    from yaml import CLoader as Loader
+    from yaml import CSafeLoader as SafeLoader
 except ImportError:
-    from yaml import Loader
+    from yaml import SafeLoader
 
 _COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
 
@@ -30,8 +30,8 @@ def extract_columns(expr: str) -> set[str]:
         A set of column names.
 
     Examples:
-        >>> extract_columns("$a + $b * 3")
-        {'a', 'b'}
+        >>> sorted(extract_columns("$a + $b * 3"))
+        ['a', 'b']
         >>> extract_columns("f'hello {$name}'")
         {'name'}
         >>> extract_columns("1 + 2")
@@ -294,13 +294,13 @@ class Parser:
                     data = Path(data).read_text()
             except (OSError, ValueError):
                 pass  # Not a valid path; treat as raw YAML string
-            mapping = yaml.load(data, Loader=Loader)
+            mapping = yaml.load(data, Loader=SafeLoader)
         elif isinstance(data, Path):
             if data.is_file():
                 data = data.read_text()
             else:
                 raise FileNotFoundError(f"YAML file not found: {data}")
-            mapping = yaml.load(data, Loader=Loader)
+            mapping = yaml.load(data, Loader=SafeLoader)
         else:
             raise TypeError(
                 f"data must be a str, Path, or dict; got {type(data)} instead"
