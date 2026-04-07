@@ -320,6 +320,29 @@ class NodeBase(ABC):
         return False
 
     @property
+    def referenced_columns(self) -> set[str]:
+        """Returns the set of column names referenced by this node and its descendants.
+
+        Examples:
+            >>> from dftly.nodes.base import Column, Literal
+            >>> from dftly.nodes.arithmetic import Add, Multiply
+            >>> Add(Column("a"), Multiply(Column("b"), Literal(3))).referenced_columns
+            {'a', 'b'}
+            >>> Literal(42).referenced_columns
+            set()
+            >>> Column("x").referenced_columns
+            {'x'}
+        """
+        cols: set[str] = set()
+        for arg in self.args:
+            if isinstance(arg, NodeBase):
+                cols |= arg.referenced_columns
+        for val in self.kwargs.values():
+            if isinstance(val, NodeBase):
+                cols |= val.referenced_columns
+        return cols
+
+    @property
     @abstractmethod
     def polars_expr(self) -> pl.Expr:
         raise NotImplementedError("Subclasses must implement polars_expr")
@@ -636,6 +659,10 @@ class Column(Terminal, _UnaryOp):
 
     KEY = "column"
     pl_fn = _col
+
+    @property
+    def referenced_columns(self) -> set[str]:
+        return {self.args[0]}
 
 
 # Base classes for more complex non-terminal nodes

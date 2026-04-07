@@ -1,5 +1,6 @@
 from .nodes.base import NodeBase
 from pathlib import Path
+import re
 import polars as pl
 from .nodes import NODES
 import inspect
@@ -12,6 +13,33 @@ try:
     from yaml import CLoader as Loader
 except ImportError:
     from yaml import Loader
+
+_COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
+
+
+def extract_columns(expr: str) -> set[str]:
+    """Extract column names referenced in a dftly expression string.
+
+    This uses a lightweight regex scan for ``$identifier`` patterns, so it works without parsing the
+    expression. Useful when you need to know which columns an expression depends on before building a schema.
+
+    Args:
+        expr: A dftly expression string.
+
+    Returns:
+        A set of column names.
+
+    Examples:
+        >>> extract_columns("$a + $b * 3")
+        {'a', 'b'}
+        >>> extract_columns("f'hello {$name}'")
+        {'name'}
+        >>> extract_columns("1 + 2")
+        set()
+        >>> sorted(extract_columns("$col1 > 0 and $col2 != $col1"))
+        ['col1', 'col2']
+    """
+    return set(_COLUMN_RE.findall(expr))
 
 
 class Parser:
@@ -173,11 +201,13 @@ class Parser:
         return next(iter(outputs.values()))
 
     @classmethod
-    def to_polars(cls, yaml_file: str | Path) -> dict[str, pl.Expr]:
-        """Parse a YAML string or file path into a dictionary of Polars expressions.
+    def to_polars(cls, data: str | Path | dict[str, Any]) -> dict[str, pl.Expr]:
+        """Parse expressions into a dictionary of Polars expressions.
+
+        Accepts a YAML string, a file path, or a dict mapping column names to expression strings/dicts.
 
         Args:
-            yaml_file: Either a YAML string or a path to a YAML file.
+            data: A YAML string, a path to a YAML file, or a dict of ``{name: expression}``.
 
         Returns:
             A dictionary mapping output column names to Polars expressions.
@@ -185,7 +215,7 @@ class Parser:
         Raises:
             ValueError: If the YAML content is not a dictionary at the top level.
             FileNotFoundError: If a Path object is passed that does not exist.
-            TypeError: If the input is not a string or Path.
+            TypeError: If the input is not a string, Path, or dict.
 
         Examples:
             >>> exprs = Parser.to_polars("sum: '$col1 + $col2'")
@@ -200,6 +230,20 @@ class Parser:
             │ 4   │
             │ 6   │
             └─────┘
+
+        A dict can be passed directly (no YAML parsing needed):
+
+            >>> exprs = Parser.to_polars({"diff": "$col1 - $col2"})
+            >>> df.select(**exprs)
+            shape: (2, 1)
+            ┌──────┐
+            │ diff │
+            │ ---  │
+            │ i64  │
+            ╞══════╡
+            │ -2   │
+            │ -2   │
+            └──────┘
 
         It also works with file paths:
 
@@ -238,40 +282,66 @@ class Parser:
             >>> Parser.to_polars(42)
             Traceback (most recent call last):
                 ...
-            TypeError: yaml_file must be a str or Path; got <class 'int'> instead
+            TypeError: data must be a str, Path, or dict; got <class 'int'> instead
         """
         parser = cls()
 
-        if isinstance(yaml_file, str):
+        if isinstance(data, dict):
+            mapping = data
+        elif isinstance(data, str):
             try:
-                if Path(yaml_file).is_file():
-                    yaml_file = Path(yaml_file).read_text()
+                if Path(data).is_file():
+                    data = Path(data).read_text()
             except (OSError, ValueError):
                 pass  # Not a valid path; treat as raw YAML string
-        elif isinstance(yaml_file, Path):
-            if yaml_file.is_file():
-                yaml_file = yaml_file.read_text()
+            mapping = yaml.load(data, Loader=Loader)
+        elif isinstance(data, Path):
+            if data.is_file():
+                data = data.read_text()
             else:
-                raise FileNotFoundError(f"YAML file not found: {yaml_file}")
+                raise FileNotFoundError(f"YAML file not found: {data}")
+            mapping = yaml.load(data, Loader=Loader)
         else:
             raise TypeError(
-                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
+                f"data must be a str, Path, or dict; got {type(data)} instead"
             )
 
-        if not isinstance(yaml_file, str):
-            raise TypeError(
-                f"yaml_file must be a str or Path; got {type(yaml_file)} instead"
-            )
-
-        yaml_content = yaml.load(yaml_file, Loader=Loader)
-
-        if not isinstance(yaml_content, dict):
+        if not isinstance(mapping, dict):
             raise ValueError(
-                f"YAML content must be a dictionary at the top level; got {type(yaml_content)}"
+                f"YAML content must be a dictionary at the top level; got {type(mapping)}"
             )
 
         exprs = {}
-        for name, value in yaml_content.items():
+        for name, value in mapping.items():
             exprs[name] = parser(value).polars_expr.alias(name)
 
         return exprs
+
+    @classmethod
+    def expr_to_polars(cls, expr: str) -> pl.Expr:
+        """Parse a single expression string into a Polars expression.
+
+        This is a convenience method for compiling one expression without wrapping it in a dict.
+
+        Args:
+            expr: A dftly expression string.
+
+        Returns:
+            A Polars expression.
+
+        Examples:
+            >>> df = pl.DataFrame({"a": [1, 2], "b": [3, 4]})
+            >>> df.select(Parser.expr_to_polars("$a + $b"))
+            shape: (2, 1)
+            ┌─────┐
+            │ a   │
+            │ --- │
+            │ i64 │
+            ╞═════╡
+            │ 4   │
+            │ 6   │
+            └─────┘
+            >>> pl.select(Parser.expr_to_polars("1 + 2 * 3")).item()
+            7
+        """
+        return cls()(expr).polars_expr
