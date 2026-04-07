@@ -15,7 +15,7 @@ NUMERIC_TYPES: dict[str, pl.DataType] = {
     "int": pl.Int32,
     "int32": pl.Int32,
     "integer": pl.Int32,
-    "int64": pl.Int32,
+    "int64": pl.Int64,
     "long": pl.Int64,
     "int128": pl.Int128,
     "float": pl.Float32,
@@ -82,8 +82,8 @@ class Cast(BinaryOp):
     "Float32", and "str" for "Utf8").
 
     In addition, some custom types are added which resolve to standard polars types through a more complex
-    mapping; in particular:
-
+    mapping; in particular, duration units ("seconds", "minutes", "hours", "days", "weeks", "months", "years")
+    convert numeric values into durations, and "year" converts an integer into a date at the start of that year.
 
     Example:
         >>> from dftly.nodes import Literal
@@ -94,6 +94,24 @@ class Cast(BinaryOp):
         <class 'int'>
         >>> out
         3
+
+    Standard polars type aliases work as expected:
+
+        >>> pl.select(Cast(Literal("3"), Literal("int64")).polars_expr).item()
+        3
+        >>> pl.select(Cast(Literal("3.14"), Literal("float64")).polars_expr).item()
+        3.14
+        >>> pl.select(Cast(Literal(1), Literal("bool")).polars_expr).item()
+        True
+        >>> pl.select(Cast(Literal(42), Literal("str")).polars_expr).item()
+        '42'
+
+    Unsupported types raise an error:
+
+        >>> Cast(Literal("3"), Literal("unsupported_type"))
+        Traceback (most recent call last):
+            ...
+        ValueError: Unsupported type: unsupported_type
 
     This class can also be used to convert numeric types into duration types by specifying their unit:
 

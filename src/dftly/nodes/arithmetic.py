@@ -14,6 +14,8 @@ class Not(UnaryOp):
         >>> from dftly.nodes import Literal
         >>> pl.select(Not(Literal(True)).polars_expr).item()
         False
+        >>> pl.select(Not(Literal(False)).polars_expr).item()
+        True
     """
 
     KEY = "not"
@@ -28,6 +30,8 @@ class Negate(UnaryOp):
         >>> from dftly.nodes import Literal
         >>> pl.select(Negate(Literal(5)).polars_expr).item()
         -5
+        >>> pl.select(Negate(Literal(-3)).polars_expr).item()
+        3
     """
 
     KEY = "negate"
@@ -73,6 +77,8 @@ class Add(ArgsOnlyFn):
         >>> from dftly.nodes import Literal
         >>> pl.select(Add(Literal(1), Literal(2), Literal(3)).polars_expr).item()
         6
+        >>> pl.select(Add(Literal("hello "), Literal("world")).polars_expr).item()
+        'hello world'
     """
 
     KEY = "add"

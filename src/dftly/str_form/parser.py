@@ -11,6 +11,7 @@ from lark.visitors import Discard
 
 from ..nodes import (
     BINARY_OPS,
+    UNARY_OPS,
     NODES,
     Cast,
     Literal,
@@ -85,9 +86,9 @@ class DftlyGrammar(Transformer):
 
     Regex operations are supported via the following syntax:
 
-        >>> DftlyGrammar.parse_str("extract /\\d+/ from $text")
+        >>> DftlyGrammar.parse_str(r"extract /\\d+/ from $text")
         {'regex_extract': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
-        >>> DftlyGrammar.parse_str("/\\d+/ in $text")
+        >>> DftlyGrammar.parse_str(r"/\\d+/ in $text")
         {'regex_match': {'pattern': {'literal': '\\\\d+'}, 'source': {'column': 'text'}}}
 
     Casting is supported via the `::` or `... as ...` syntax. Note the two have different precedence, with
@@ -100,6 +101,20 @@ class DftlyGrammar(Transformer):
                                     {'literal': '01-'}]},
                            {'literal': '01'}]},
                   {'literal': 'date'}]}
+
+    Unary operations are supported:
+
+        >>> DftlyGrammar.parse_str("not true")
+        {'not': [{'literal': True}]}
+        >>> DftlyGrammar.parse_str("-5")
+        {'negate': [{'literal': 5}]}
+
+    Function calls with multiple arguments work:
+
+        >>> DftlyGrammar.parse_str("min($a, $b, $c)")
+        {'min': [{'column': 'a'}, {'column': 'b'}, {'column': 'c'}]}
+        >>> DftlyGrammar.parse_str("max(1, 2)")
+        {'max': [{'literal': 1}, {'literal': 2}]}
 
     The `::` or `... as ...` syntax can also be used to indicate string parsing, which currently only supports
     datetime parsing via strptime:
@@ -114,8 +129,21 @@ class DftlyGrammar(Transformer):
 
     @classmethod
     def parse_str(cls, s: str) -> Any:
-        """Parse a string into an expression tree."""
-        tree = GRAMMAR.parse(s)
+        """Parse a string into an expression tree.
+
+        Raises:
+            ValueError: If the string cannot be parsed.
+
+        Examples:
+            >>> DftlyGrammar.parse_str("???")
+            Traceback (most recent call last):
+                ...
+            ValueError: Failed to parse expression '???': ...
+        """
+        try:
+            tree = GRAMMAR.parse(s)
+        except Exception as e:
+            raise ValueError(f"Failed to parse expression {s!r}: {e}") from e
 
         return cls().transform(tree)
 
@@ -177,6 +205,16 @@ class DftlyGrammar(Transformer):
             )
 
         return BINARY_OPS[op].from_lark([left, right])
+
+    def unary_expr(self, items: list[dict | str]) -> dict:
+        op, operand = items
+
+        if op not in UNARY_OPS:
+            raise ValueError(
+                f"Unsupported unary operator: {op}; allowed: {list(UNARY_OPS)}"
+            )
+
+        return UNARY_OPS[op].from_lark([operand])
 
     def func(self, items: list[Any]) -> dict:
         func_name = items[0]

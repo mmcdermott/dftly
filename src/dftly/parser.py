@@ -174,15 +174,80 @@ class Parser:
 
     @classmethod
     def to_polars(cls, yaml_file: str | Path) -> dict[str, pl.Expr]:
-        """Parse a YAML file into a dictionary of Polars expressions."""
+        """Parse a YAML string or file path into a dictionary of Polars expressions.
+
+        Args:
+            yaml_file: Either a YAML string or a path to a YAML file.
+
+        Returns:
+            A dictionary mapping output column names to Polars expressions.
+
+        Raises:
+            ValueError: If the YAML content is not a dictionary at the top level.
+            FileNotFoundError: If a Path object is passed that does not exist.
+            TypeError: If the input is not a string or Path.
+
+        Examples:
+            >>> exprs = Parser.to_polars("sum: '$col1 + $col2'")
+            >>> df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
+            >>> df.select(**exprs)
+            shape: (2, 1)
+            ┌─────┐
+            │ sum │
+            │ --- │
+            │ i64 │
+            ╞═════╡
+            │ 4   │
+            │ 6   │
+            └─────┘
+
+        It also works with file paths:
+
+            >>> import tempfile, os
+            >>> with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            ...     _ = f.write("double: '$x * 2'")
+            ...     path = f.name
+            >>> exprs = Parser.to_polars(path)
+            >>> pl.DataFrame({"x": [5]}).select(**exprs)
+            shape: (1, 1)
+            ┌────────┐
+            │ double │
+            │ ---    │
+            │ i64    │
+            ╞════════╡
+            │ 10     │
+            └────────┘
+            >>> os.unlink(path)
+
+        Non-dictionary YAML raises an error:
+
+            >>> Parser.to_polars("- item1")
+            Traceback (most recent call last):
+                ...
+            ValueError: YAML content must be a dictionary at the top level; got <class 'list'>
+
+        A missing file path raises an error:
+
+            >>> Parser.to_polars(Path("/nonexistent/file.yaml"))
+            Traceback (most recent call last):
+                ...
+            FileNotFoundError: YAML file not found: /nonexistent/file.yaml
+
+        Invalid input types raise an error:
+
+            >>> Parser.to_polars(42)
+            Traceback (most recent call last):
+                ...
+            TypeError: yaml_file must be a str or Path; got <class 'int'> instead
+        """
         parser = cls()
 
         if isinstance(yaml_file, str):
             try:
-                if Path(yaml_file).is_file:
+                if Path(yaml_file).is_file():
                     yaml_file = Path(yaml_file).read_text()
-            except Exception:
-                pass
+            except (OSError, ValueError):
+                pass  # Not a valid path; treat as raw YAML string
         elif isinstance(yaml_file, Path):
             if yaml_file.is_file():
                 yaml_file = yaml_file.read_text()

@@ -50,6 +50,13 @@ class StringInterpolate(ArgsOnlyFn):
         │ hello Alice │
         │ hello Bob   │
         └─────────────┘
+
+    At least two arguments (pattern + fields) are required:
+
+        >>> StringInterpolate(Literal("hello {}"))
+        Traceback (most recent call last):
+            ...
+        ValueError: StringInterpolate requires more than one argument; ...
     """
 
     KEY = "string_interpolate"
@@ -163,6 +170,13 @@ class RegexExtract(KwargsOnlyFn):
         │ foo  │
         │ baz  │
         └──────┘
+
+    A negative group index raises an error:
+
+        >>> RegexExtract(pattern=Literal(r"\\d+"), source=Literal("abc"), group_index=Literal(-1))
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be a non-negative integer.
     """
 
     KEY = "regex_extract"

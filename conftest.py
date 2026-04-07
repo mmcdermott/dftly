@@ -1,5 +1,6 @@
 """Test set-up and fixtures code."""
 
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ def __setup_doctest_namespace(
         {
             "datetime": datetime,
             "tempfile": tempfile,
+            "os": os,
             "pl": pl,
             "Path": Path,
         }

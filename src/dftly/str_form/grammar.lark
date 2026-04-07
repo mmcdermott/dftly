@@ -1,3 +1,25 @@
+// Dftly expression grammar (LALR(1))
+//
+// Precedence (lowest to highest):
+//   1. global_cast   — `... as type` / `... as '%fmt'` / `... @ TIME`
+//   2. conditional    — `... if ... else ...`
+//   3. bool_and       — `and`, `&&`
+//   4. bool_or        — `or`, `||`
+//   5. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
+//   6. additive       — `+`, `-`
+//   7. multiplicative — `*`, `/`
+//   8. local_cast     — `::type` / `::'%fmt'`
+//   9. unary          — `not`, `!`, unary `+`/`-`
+//  10. primary        — literals, columns, function calls, regex, parenthesized expressions
+//
+// Priority annotations (e.g. `.1`, `.2`) on terminals resolve lexer ambiguities:
+// higher priority terminals are preferred when multiple patterns match the same input.
+// For example, BOOL.1 ensures "true"/"false" are lexed as booleans rather than NAMEs,
+// and AND.2/OR.2/NOT.2 ensure keywords take precedence over NAME matches.
+//
+// Rules prefixed with `?` are "inline" rules: they are transparent in the parse tree,
+// so the tree only contains the named alternatives (e.g., `binary_expr`, `cast_expr`).
+
 %import common.WS
 %ignore WS
 
@@ -28,7 +50,7 @@ AND_SYM: "&&"
 OR_SYM: "||"
 NOT_SYM: "!"
 
-// Keywords
+// Keywords — priority .2 ensures these are preferred over NAME
 FORMAT_PFX: "f"
 AS: /as/i
 IF: /if/i
@@ -51,6 +73,7 @@ FROM.2: /from/i
 
 ?expr: global_cast
 
+// Lowest precedence: global cast with `as`/`@` binds last
 ?global_cast: conditional AS NAME   -> cast_expr
             | conditional AS STRING -> strptime
             | conditional AT TIME   -> binary_expr
@@ -74,6 +97,7 @@ FROM.2: /from/i
 ?multiplicative: multiplicative (TIMES|DIV) local_cast  -> binary_expr
                | local_cast
 
+// Higher precedence: local cast with `::` binds tighter than arithmetic
 ?local_cast: unary CAST NAME   -> cast_expr
            | unary CAST STRING -> strptime
            | unary

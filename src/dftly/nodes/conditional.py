@@ -24,6 +24,20 @@ class Conditional(KwargsOnlyFn):
         >>> node = Conditional(when=Literal(False), then=Literal(2))
         >>> print(pl.select(node.polars_expr).item())
         None
+
+    Missing required kwargs raise an error:
+
+        >>> Conditional(when=Literal(True))
+        Traceback (most recent call last):
+            ...
+        ValueError: Missing required keys for conditional: {'then'}
+
+    Extra kwargs raise an error:
+
+        >>> Conditional(when=Literal(True), then=Literal(1), bad=Literal(2))
+        Traceback (most recent call last):
+            ...
+        ValueError: Extra unallowed keys for conditional: {'bad'}
     """
 
     KEY = "conditional"

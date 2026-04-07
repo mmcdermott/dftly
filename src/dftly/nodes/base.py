@@ -613,7 +613,26 @@ def _col(x: str) -> pl.Expr:
 
 
 class Column(Terminal, _UnaryOp):
-    """This node represents a column in a dataframe."""
+    """This node represents a column in a dataframe.
+
+    Example:
+        >>> df = pl.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]})
+        >>> df.select(Column("x").polars_expr)
+        shape: (3, 1)
+        ┌─────┐
+        │ x   │
+        │ --- │
+        │ i64 │
+        ╞═════╡
+        │ 1   │
+        │ 2   │
+        │ 3   │
+        └─────┘
+        >>> Column.matches({"column": "x"})
+        True
+        >>> Column.matches({"expression": {"type": "column", "arguments": "x"}})
+        True
+    """
 
     KEY = "column"
     pl_fn = _col
