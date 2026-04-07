@@ -116,7 +116,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "lark" },
-    { name = "polars", specifier = "~=1.33.0" },
+    { name = "polars", specifier = ">=1.33" },
     { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
