@@ -20,7 +20,7 @@ dependencies = [
     "PyYAML",
     "lark",
     "python-dateutil",
-    "polars~=1.33.0",
+    "polars>=1.33",
 ]
 
 [dependency-groups]
