@@ -7,6 +7,52 @@ from .base import ArgsOnlyFn, BinaryOp, UnaryOp
 import polars as pl
 
 
+class Hash(ArgsOnlyFn):
+    """This non-terminal node computes a hash of the input expression.
+
+    The result is a UInt64 value (Polars' native hash type). Use ``::int64`` to cast to signed if needed.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> result = pl.select(Hash(Literal("hello")).polars_expr).item()
+        >>> isinstance(result, int) and result >= 0
+        True
+        >>> pl.select(Hash(Literal("hello")).polars_expr).dtypes
+        [UInt64]
+        >>> pl.select(Hash(Literal("hello")).polars_expr).item() == pl.select(Hash(Literal("hello")).polars_expr).item()
+        True
+        >>> pl.select(Hash(Literal("hello")).polars_expr).item() != pl.select(Hash(Literal("world")).polars_expr).item()
+        True
+
+    Only one argument is accepted:
+
+        >>> Hash(Literal("a"), Literal("b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: hash requires exactly one argument; got 2
+    """
+
+    KEY = "hash"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        """Wrap single-argument lark results in a list for consistent handling."""
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        return self.args[0].polars_expr.hash()
+
+
 class Not(UnaryOp):
     """This non-terminal node represents the logical NOT of an expression.
 

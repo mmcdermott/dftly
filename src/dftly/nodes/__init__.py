@@ -1,5 +1,6 @@
 from .base import BinaryOp, UnaryOp, Literal, Column, NodeBase
 from .arithmetic import (
+    Hash,
     Not,
     Negate,
     And,
@@ -28,6 +29,7 @@ from .types import Cast
 __nodes = [
     Literal,
     Column,
+    Hash,
     Not,
     Negate,
     And,
