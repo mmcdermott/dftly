@@ -1,6 +1,7 @@
 from .nodes.base import NodeBase
 from pathlib import Path
 import re
+import warnings
 import polars as pl
 from .nodes import NODES
 import inspect
@@ -100,6 +101,29 @@ class Parser:
         >>> pl.select(node.polars_expr).item()
         'foo'
 
+    Bare words (identifiers without ``$``, quotes, or parentheses) are treated as string literals
+    when they appear as the entire expression. This is especially useful in YAML configs where
+    writing ``code: MEDS_BIRTH`` is much cleaner than ``code: '"MEDS_BIRTH"'``:
+
+        >>> full_parser = Parser()
+        >>> node = full_parser("MEDS_BIRTH")
+        >>> node
+        Literal('MEDS_BIRTH')
+        >>> pl.select(node.polars_expr).item()
+        'MEDS_BIRTH'
+
+    However, when a bare word appears inside a larger expression, a warning is issued because it
+    likely indicates a missing ``$`` prefix for a column reference:
+
+        >>> import warnings
+        >>> with warnings.catch_warnings(record=True) as w:
+        ...     warnings.simplefilter("always")
+        ...     node = full_parser("$col + TYPO")
+        ...     assert len(w) == 1
+        ...     assert "Bare word 'TYPO'" in str(w[0].message)
+        >>> node
+        Add(Column('col'), Literal('TYPO'))
+
     The parser parses nodes recursively:
 
         >>> node = parser({'add': ['"foo"', '"bar"']})
@@ -165,12 +189,23 @@ class Parser:
                 matches.add(name)
         return matches
 
-    def __call__(self, value: Any):
+    def __call__(self, value: Any, _nested: bool = False):
         outputs = {}
         errors = {}
 
         if isinstance(value, str):
             value = DftlyGrammar.parse_str(value)
+
+        if isinstance(value, dict) and list(value.keys()) == ["bare_word"]:
+            word = value["bare_word"]
+            if _nested:
+                warnings.warn(
+                    f"Bare word {word!r} interpreted as string literal in a subexpression. "
+                    f"Did you mean the column '${word}'? "
+                    f'Use ${word} for a column reference or "{word}" for an explicit string literal.',
+                    stacklevel=2,
+                )
+            value = {"literal": word}
 
         for node in self._matching_nodes(value):
             try:
@@ -182,8 +217,8 @@ class Parser:
                     args, kwargs = node_cls.args_from_value(value)
 
                     if not node_cls.is_terminal:
-                        args = [self(arg) for arg in args]
-                        kwargs = {k: self(v) for k, v in kwargs.items()}
+                        args = [self(arg, _nested=True) for arg in args]
+                        kwargs = {k: self(v, _nested=True) for k, v in kwargs.items()}
 
                     outputs[node] = node_cls(*args, **kwargs)
             except Exception as e:
