@@ -148,23 +148,28 @@ literals when they appear as a standalone expression:
 ```python
 >>> ops = r"""
 ... code: MEDS_BIRTH
-... label: some_category
+... col_ref: '$col1 + $col2'
 ... quoted: '"hello"'
+... number: '42'
+... bool_val: 'true'
 ... """
->>> pl.select(**Parser.to_polars(ops))
-shape: (1, 3)
-┌────────────┬───────────────┬────────┐
-│ code       ┆ label         ┆ quoted │
-│ ---        ┆ ---           ┆ ---    │
-│ str        ┆ str           ┆ str    │
-╞════════════╪═══════════════╪════════╡
-│ MEDS_BIRTH ┆ some_category ┆ hello  │
-└────────────┴───────────────┴────────┘
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 5)
+┌────────────┬─────────┬────────┬────────┬──────────┐
+│ code       ┆ col_ref ┆ quoted ┆ number ┆ bool_val │
+│ ---        ┆ ---     ┆ ---    ┆ ---    ┆ ---      │
+│ str        ┆ i64     ┆ str    ┆ i32    ┆ bool     │
+╞════════════╪═════════╪════════╪════════╪══════════╡
+│ MEDS_BIRTH ┆ 4       ┆ hello  ┆ 42     ┆ true     │
+│ MEDS_BIRTH ┆ 6       ┆ hello  ┆ 42     ┆ true     │
+└────────────┴─────────┴────────┴────────┴──────────┘
 
 ```
 
-This is unambiguous because column references always require the `$` prefix (e.g., `$col_name`),
-so a bare word cannot be confused with a column, function call, or any other expression.
+Only bare words are affected — column references (`$col`), quoted strings (`"hello"`), numbers,
+booleans, and all other expression types parse exactly as before. This is unambiguous because column
+references always require the `$` prefix, so a bare word cannot be confused with a column, function
+call, or any other expression.
 
 **Warning:** If a bare word appears as part of a larger expression (e.g., `$col + TYPO`), dftly
 will still interpret it as a string literal but will emit a warning, since this usually indicates a
