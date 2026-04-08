@@ -114,6 +114,19 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("-5")
         {'negate': [{'literal': 5}]}
 
+    Bare words (identifiers without a ``$`` prefix, quotes, or parentheses) are parsed as bare_word
+    nodes, distinct from regular literals. This enables YAML-friendly configs where string values
+    like ``MEDS_BIRTH`` don't need awkward double-quoting (``'"MEDS_BIRTH"'``). The ``bare_word``
+    dict key is converted to a ``literal`` by the :class:`Parser`, which also warns if a bare word
+    appears inside a larger expression (where it likely indicates a missing ``$`` prefix):
+
+        >>> DftlyGrammar.parse_str("MEDS_BIRTH")
+        {'bare_word': 'MEDS_BIRTH'}
+        >>> DftlyGrammar.parse_str("hello_world")
+        {'bare_word': 'hello_world'}
+        >>> DftlyGrammar.parse_str("$col + TYPO")
+        {'add': [{'column': 'col'}, {'bare_word': 'TYPO'}]}
+
     Function calls with multiple arguments work:
 
         >>> DftlyGrammar.parse_str("min($a, $b, $c)")
@@ -231,6 +244,9 @@ class DftlyGrammar(Transformer):
             )
 
         return NODES[func_name].from_lark(args)
+
+    def bare_word(self, items: list[Any]) -> dict:
+        return {"bare_word": items[0]}
 
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items

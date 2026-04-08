@@ -138,6 +138,49 @@ shape: (1, 7)
 
 ```
 
+### Bare words as string literals
+
+When dftly expressions are embedded in YAML config files, string literals normally require awkward
+double-quoting because YAML strips its own quotes before dftly sees the value. To avoid this, dftly
+treats **bare words** — identifiers without a `$` prefix, quotes, or parentheses — as string
+literals when they appear as a standalone expression:
+
+```python
+>>> ops = r"""
+... code: MEDS_BIRTH
+... label: some_category
+... quoted: '"hello"'
+... """
+>>> pl.select(**Parser.to_polars(ops))
+shape: (1, 3)
+┌────────────┬───────────────┬────────┐
+│ code       ┆ label         ┆ quoted │
+│ ---        ┆ ---           ┆ ---    │
+│ str        ┆ str           ┆ str    │
+╞════════════╪═══════════════╪════════╡
+│ MEDS_BIRTH ┆ some_category ┆ hello  │
+└────────────┴───────────────┴────────┘
+
+```
+
+This is unambiguous because column references always require the `$` prefix (e.g., `$col_name`),
+so a bare word cannot be confused with a column, function call, or any other expression.
+
+**Warning:** If a bare word appears as part of a larger expression (e.g., `$col + TYPO`), dftly
+will still interpret it as a string literal but will emit a warning, since this usually indicates a
+missing `$` prefix rather than an intentional literal:
+
+```python
+>>> import warnings
+>>> with warnings.catch_warnings(record=True) as w:
+...     warnings.simplefilter("always")
+...     expr = Parser.expr_to_polars("$col1 + TYPO")
+...     assert len(w) == 1
+...     print(w[0].message)
+Bare word 'TYPO' interpreted as string literal in a subexpression. Did you mean the column '$TYPO'? Use $TYPO for a column reference or "TYPO" for an explicit string literal.
+
+```
+
 ## Detailed Documentation
 
 Internally, this simply parses the yaml file into a mapping, then treats the mapping as a map from desired
