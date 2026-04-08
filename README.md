@@ -148,28 +148,30 @@ literals when they appear as a standalone expression:
 ```python
 >>> ops = r"""
 ... code: MEDS_BIRTH
-... col_ref: '$col1 + $col2'
-... quoted: '"hello"'
-... number: '42'
-... bool_val: 'true'
+... col_ref: $col1 + $col2
+... quoted_str: '"hello"'
+... number: 42
+... bool_val: true
 ... """
 >>> df.select(**Parser.to_polars(ops))
 shape: (2, 5)
-┌────────────┬─────────┬────────┬────────┬──────────┐
-│ code       ┆ col_ref ┆ quoted ┆ number ┆ bool_val │
-│ ---        ┆ ---     ┆ ---    ┆ ---    ┆ ---      │
-│ str        ┆ i64     ┆ str    ┆ i32    ┆ bool     │
-╞════════════╪═════════╪════════╪════════╪══════════╡
-│ MEDS_BIRTH ┆ 4       ┆ hello  ┆ 42     ┆ true     │
-│ MEDS_BIRTH ┆ 6       ┆ hello  ┆ 42     ┆ true     │
-└────────────┴─────────┴────────┴────────┴──────────┘
+┌────────────┬─────────┬────────────┬────────┬──────────┐
+│ code       ┆ col_ref ┆ quoted_str ┆ number ┆ bool_val │
+│ ---        ┆ ---     ┆ ---        ┆ ---    ┆ ---      │
+│ str        ┆ i64     ┆ str        ┆ i32    ┆ bool     │
+╞════════════╪═════════╪════════════╪════════╪══════════╡
+│ MEDS_BIRTH ┆ 4       ┆ hello      ┆ 42     ┆ true     │
+│ MEDS_BIRTH ┆ 6       ┆ hello      ┆ 42     ┆ true     │
+└────────────┴─────────┴────────────┴────────┴──────────┘
 
 ```
 
-Only bare words are affected — column references (`$col`), quoted strings (`"hello"`), numbers,
-booleans, and all other expression types parse exactly as before. This is unambiguous because column
-references always require the `$` prefix, so a bare word cannot be confused with a column, function
-call, or any other expression.
+Only bare words are affected — column references (`$col1 + $col2`), quoted strings (`"hello"`),
+numbers, booleans, and all other expression types work without dftly-level quoting. Note that
+`number: 42` and `bool_val: true` are parsed by YAML itself as int/bool and passed directly to
+dftly as POD literals — they never go through the expression grammar. This is unambiguous because
+column references always require the `$` prefix, so a bare word cannot be confused with a column,
+function call, or any other expression.
 
 **Warning:** If a bare word appears as part of a larger expression (e.g., `$col + TYPO`), dftly
 will still interpret it as a string literal but will emit a warning, since this usually indicates a
