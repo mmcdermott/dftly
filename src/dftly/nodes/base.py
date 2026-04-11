@@ -25,6 +25,102 @@ class NodeBase(ABC):
 
     Nodes are the base class of our minimal abstract syntax tree (AST) for representing the set of data
     transformation operations we support.
+
+    The ``__post_init__`` hook validates that subclasses define a valid KEY and receive valid arguments:
+
+        >>> class BadKeyType(NodeBase):
+        ...     KEY = 123
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKeyType()
+        Traceback (most recent call last):
+            ...
+        TypeError: KEY must be a string; got int
+        >>> class EmptyKey(NodeBase):
+        ...     KEY = ""
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> EmptyKey()
+        Traceback (most recent call last):
+            ...
+        ValueError: KEY must be a non-empty string
+        >>> class UpperKey(NodeBase):
+        ...     KEY = "UPPER"
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> UpperKey()
+        Traceback (most recent call last):
+            ...
+        ValueError: KEY must be lowercase; got UPPER
+
+    Subclasses that corrupt args/kwargs before calling super are caught:
+
+        >>> class BadArgs(NodeBase):
+        ...     KEY = "badargs"
+        ...     def __post_init__(self):
+        ...         self.args = 42
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadArgs()
+        Traceback (most recent call last):
+            ...
+        TypeError: args must be a sequence; got int
+        >>> class BadKwargs(NodeBase):
+        ...     KEY = "badkwargs"
+        ...     def __post_init__(self):
+        ...         self.kwargs = "not a dict"
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKwargs()
+        Traceback (most recent call last):
+            ...
+        TypeError: kwargs must be a dictionary; got str
+        >>> class BadKwargKeys(NodeBase):
+        ...     KEY = "badkwargkeys"
+        ...     def __post_init__(self):
+        ...         self.kwargs = {1: "val"}
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKwargKeys()
+        Traceback (most recent call last):
+            ...
+        TypeError: KEY must be a string; ...
+
+    The abstract methods raise ``NotImplementedError`` when called directly:
+
+        >>> class Concrete(NodeBase):
+        ...     KEY = "concrete"
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): return NodeBase.polars_expr.fget(self)
+        ...     @classmethod
+        ...     def from_lark(cls, items): return {}
+        >>> Concrete().polars_expr
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Subclasses must implement polars_expr
+        >>> NodeBase.from_lark([])
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Subclasses must implement from_lark
     """
 
     KEY: ClassVar[str]
@@ -108,24 +204,24 @@ class NodeBase(ABC):
     def __post_init__(self):
         """Post-initialization hook for subclasses to validate arguments."""
 
-        if not isinstance(self.KEY, str):  # pragma: no cover
+        if not isinstance(self.KEY, str):
             raise TypeError(f"KEY must be a string; got {type(self.KEY).__name__}")
 
-        if not self.KEY:  # pragma: no cover
+        if not self.KEY:
             raise ValueError("KEY must be a non-empty string")
 
-        if not isinstance(self.args, Sequence):  # pragma: no cover
+        if not isinstance(self.args, Sequence):
             raise TypeError(f"args must be a sequence; got {type(self.args).__name__}")
 
-        if not isinstance(self.kwargs, dict):  # pragma: no cover
+        if not isinstance(self.kwargs, dict):
             raise TypeError(
                 f"kwargs must be a dictionary; got {type(self.kwargs).__name__}"
             )
 
-        if self.KEY != self.KEY.lower():  # pragma: no cover
+        if self.KEY != self.KEY.lower():
             raise ValueError(f"KEY must be lowercase; got {self.KEY}")
 
-        if not all(isinstance(k, str) for k in self.kwargs.keys()):  # pragma: no cover
+        if not all(isinstance(k, str) for k in self.kwargs.keys()):
             raise TypeError(f"KEY must be a string; got {type(self.KEY).__name__}")
 
     @classmethod
@@ -348,9 +444,7 @@ class NodeBase(ABC):
     @property
     @abstractmethod
     def polars_expr(self) -> pl.Expr:
-        raise NotImplementedError(
-            "Subclasses must implement polars_expr"
-        )  # pragma: no cover
+        raise NotImplementedError("Subclasses must implement polars_expr")
 
     def __repr__(self) -> str:
         """Returns a string representation of the node."""
@@ -363,9 +457,7 @@ class NodeBase(ABC):
     @abstractmethod
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
         """Must be implemented by subclasses to parse from lark."""
-        raise NotImplementedError(
-            "Subclasses must implement from_lark"
-        )  # pragma: no cover
+        raise NotImplementedError("Subclasses must implement from_lark")
 
 
 # Intermediate base shared validators

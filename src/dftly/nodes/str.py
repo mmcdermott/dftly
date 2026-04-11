@@ -58,6 +58,13 @@ class StringInterpolate(ArgsOnlyFn):
             ...
         ValueError: StringInterpolate requires more than one argument; ...
 
+    A pattern that cannot be evaluated as a literal raises an error:
+
+        >>> StringInterpolate(Column("x"), Column("name"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The pattern argument must be a string, Literal, or Literal-evaluatable instance. ...
+
     A non-string pattern raises an error:
 
         >>> StringInterpolate(Literal(42), Column("name"))
@@ -98,7 +105,7 @@ class StringInterpolate(ArgsOnlyFn):
 
         try:
             pattern = pl.select(pattern.polars_expr).item()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             raise ValueError(
                 "The pattern argument must be a string, Literal, or Literal-evaluatable instance. "
                 "This `NodeBase` instance can't be evaluated to a string literal."
@@ -212,6 +219,20 @@ class RegexExtract(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         TypeError: all keyword arguments to regex_extract must be str:NodeBase pairs
+
+    The group_index property validates its input type and evaluatability:
+
+        >>> node = RegexExtract(pattern=Literal(r"\\d+"), source=Literal("abc"))
+        >>> node.kwargs["group_index"] = "not_a_node"
+        >>> node.group_index
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be an integer or a NodeBase instance ...Got <class 'str'>...
+        >>> node.kwargs["group_index"] = Column("x")
+        >>> node.group_index
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be an integer or a NodeBase instance ...can't be evaluated...
     """
 
     KEY = "regex_extract"
@@ -236,7 +257,7 @@ class RegexExtract(KwargsOnlyFn):
         if isinstance(group_index, int):
             return group_index
 
-        if not isinstance(group_index, NodeBase):  # pragma: no cover
+        if not isinstance(group_index, NodeBase):
             raise ValueError(
                 "The group_index argument must be an integer or a NodeBase instance that evaluates "
                 f"to an integer. Got {type(group_index)} instead."
@@ -244,7 +265,7 @@ class RegexExtract(KwargsOnlyFn):
 
         try:
             return pl.select(group_index.polars_expr).item()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             raise ValueError(
                 "The group_index argument must be an integer or a NodeBase instance that evaluates "
                 "to an integer. This `NodeBase` instance can't be evaluated to an integer."
@@ -372,6 +393,31 @@ class Strptime(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: The strict argument must be a boolean, ...
+
+    The format_str and strict properties validate their input types:
+
+        >>> from dftly.nodes import Column
+        >>> node = Strptime(format=Literal("%Y-%m-%d"), source=Literal("2023-01-01"))
+        >>> node.kwargs["format"] = "not_a_node"
+        >>> node.format_str
+        Traceback (most recent call last):
+            ...
+        ValueError: The format argument must be a NodeBase instance ...Got <class 'str'>...
+        >>> node.kwargs["format"] = Column("x")
+        >>> node.format_str
+        Traceback (most recent call last):
+            ...
+        ValueError: The format argument must be a NodeBase instance ...can't be evaluated...
+        >>> node.kwargs["strict"] = "not_a_node"
+        >>> node.strict
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must be a NodeBase instance ...
+        >>> node.kwargs["strict"] = Column("x")
+        >>> node.strict
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must evaluate to a boolean.
     """
 
     KEY = "strptime"
@@ -449,7 +495,7 @@ class Strptime(KwargsOnlyFn):
     def format_str(self) -> str:
         fmt = self.kwargs["format"]
 
-        if not isinstance(fmt, NodeBase):  # pragma: no cover
+        if not isinstance(fmt, NodeBase):
             raise ValueError(
                 "The format argument must be a NodeBase instance that evaluates to a string. "
                 f"Got {type(fmt)} instead."
@@ -457,7 +503,7 @@ class Strptime(KwargsOnlyFn):
 
         try:
             return pl.select(fmt.polars_expr).item()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             raise ValueError(
                 "The format argument must be a NodeBase instance that evaluates to a string. "
                 "This `NodeBase` instance can't be evaluated to a string."
@@ -488,13 +534,13 @@ class Strptime(KwargsOnlyFn):
         strict_node = self.kwargs.get("strict", None)
         if strict_node is None:
             return True  # default: strict=True for backwards compatibility
-        if not isinstance(strict_node, NodeBase):  # pragma: no cover
+        if not isinstance(strict_node, NodeBase):
             raise ValueError(
                 "The strict argument must be a NodeBase instance that evaluates to a boolean."
             )
         try:
             val = pl.select(strict_node.polars_expr).item()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             raise ValueError("The strict argument must evaluate to a boolean.") from e
         if not isinstance(val, bool):
             raise ValueError(f"The strict argument must be a boolean, got {type(val)}")

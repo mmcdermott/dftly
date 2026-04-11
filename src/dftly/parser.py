@@ -10,10 +10,7 @@ from collections import defaultdict
 from .str_form.parser import DftlyGrammar
 import yaml
 
-try:
-    from yaml import CSafeLoader as SafeLoader
-except ImportError:  # pragma: no cover
-    from yaml import SafeLoader
+SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 _COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
 
@@ -163,6 +160,23 @@ class Parser:
         Traceback (most recent call last):
             ...
         ValueError: multiple nodes registered with key 'add': ['add', 'sum']
+
+    If two different node types both match the same value, an error is raised:
+
+        >>> from dftly.nodes.base import _UnaryOp
+        >>> class AlsoLiteral(_UnaryOp):
+        ...     KEY = "also_literal"
+        ...     is_terminal = True
+        ...     pl_fn = pl.lit
+        ...     @classmethod
+        ...     def matches(cls, value): return Literal.matches(value)
+        ...     @classmethod
+        ...     def args_from_value(cls, value): return Literal.args_from_value(value)
+        >>> p = Parser({"literal": Literal, "also_literal": AlsoLiteral})
+        >>> p(42)
+        Traceback (most recent call last):
+            ...
+        ValueError: multiple matching nodes for ...
     """
 
     def __init__(self, registered_nodes: dict[str, NodeBase] = NODES):
@@ -231,7 +245,7 @@ class Parser:
                 for name, err in errors.items():
                     err_lines.append(f"- {name}: {err}")
             raise ValueError("\n".join(err_lines))
-        if len(outputs) > 1:  # pragma: no cover
+        if len(outputs) > 1:
             raise ValueError(f"multiple matching nodes for {node}: {list(outputs)}")
         return next(iter(outputs.values()))
 
