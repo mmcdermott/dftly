@@ -28,7 +28,7 @@ Pull requests (PRs) are warmly welcomed! New contributions should generally buil
 1. **Fork and Clone the Repository**: Start by forking the relevant repository and cloning your fork locally.
 
     ```sh
-    git clone https://github.com/your-username/MEDS_extract.git
+    git clone https://github.com/your-username/dftly.git
     ```
 
 2. **Create a Branch**: For each contribution, create a dedicated branch with a descriptive name based on the `dev` branch:
@@ -45,7 +45,7 @@ Pull requests (PRs) are warmly welcomed! New contributions should generally buil
 
 4. **Testing and Code Style**:
 
-    - MEDS uses automated workflows for testing and pre-commit code style checks. PRs must pass these checks to be accepted.
+    - dftly uses automated workflows for testing and pre-commit code style checks. PRs must pass these checks to be accepted.
     - You can install the necessary development dependencies locally with:
         ```sh
         pip install -e .[dev]

@@ -234,9 +234,9 @@ class RegexExtract(KwargsOnlyFn):
 class RegexMatch(KwargsOnlyFn):
     """This node matches a regex pattern against a target node.
 
-    This node only accepts keyword arguments, and requires "pattern" and "from" keys. The "pattern" key is the
-    regex pattern to match, and the "from" key is the target node to match against. The result is a boolean
-    indicating whether the pattern matches the target.
+    This node only accepts keyword arguments, and requires "pattern" and "source" keys. The "pattern" key is
+    the regex pattern to match, and the "source" key is the target node to match against. The result is a
+    boolean indicating whether the pattern matches the target.
 
     Example:
         >>> from dftly.nodes import Literal, Column
