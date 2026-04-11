@@ -143,6 +143,16 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("'2023 01 01'::'%Y %m %d'")
         {'strptime': {'format': {'literal': '%Y %m %d'},
                       'source': {'literal': '2023 01 01'}}}
+
+    Non-strict strptime uses the ``?`` prefix on the format string:
+
+        >>> DftlyGrammar.parse_str('$dod::?"%Y-%m-%d %H:%M:%S"')
+        {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}
+
+    Fallback format parsing tries multiple formats in sequence:
+
+        >>> DftlyGrammar.parse_str('$dod::"%Y-%m-%d %H:%M:%S", "%Y-%m-%d"')
+        {'coalesce': [{'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}, {'strptime': {'format': {'literal': '%Y-%m-%d'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}]}
     """
 
     @classmethod
@@ -205,8 +215,8 @@ class DftlyGrammar(Transformer):
         return Discard
 
     IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = FORMAT_PFX = DOLLAR = (
-        _discard_token
-    )
+        QUESTION
+    ) = _discard_token
 
     def NAME(self, val: Token) -> str:
         return str(val)
@@ -251,3 +261,13 @@ class DftlyGrammar(Transformer):
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    def strptime_nonstrict(self, items: list[Any]) -> dict:
+        source, format_str = items
+        return {
+            "strptime": {
+                "format": format_str,
+                "source": source,
+                "strict": Literal.from_lark(False),
+            }
+        }

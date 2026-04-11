@@ -12,6 +12,7 @@ from .arithmetic import (
     Mean,
     Min,
     Max,
+    Coalesce,
 )
 from .comparison import (
     GreaterThan,
@@ -54,6 +55,7 @@ __nodes = [
     Cast,
     Strptime,
     SetTime,
+    Coalesce,
 ]
 
 NODES = NodeBase.unique_dict_by_prop(__nodes)

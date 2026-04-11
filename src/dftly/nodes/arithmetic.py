@@ -217,3 +217,18 @@ class Max(ArgsOnlyFn):
 
     KEY = "max"
     pl_fn = pl.max_horizontal
+
+
+class Coalesce(ArgsOnlyFn):
+    """This non-terminal node returns the first non-null value from its arguments.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(Coalesce(Literal(None), Literal(1), Literal(2)).polars_expr).item()
+        1
+        >>> pl.select(Coalesce(Literal(3), Literal(None)).polars_expr).item()
+        3
+    """
+
+    KEY = "coalesce"
+    pl_fn = pl.coalesce
