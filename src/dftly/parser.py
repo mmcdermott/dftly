@@ -10,10 +10,7 @@ from collections import defaultdict
 from .str_form.parser import DftlyGrammar
 import yaml
 
-try:
-    from yaml import CSafeLoader as SafeLoader
-except ImportError:
-    from yaml import SafeLoader
+SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 _COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
 
@@ -163,6 +160,23 @@ class Parser:
         Traceback (most recent call last):
             ...
         ValueError: multiple nodes registered with key 'add': ['add', 'sum']
+
+    If two different node types both match the same value, an error is raised:
+
+        >>> from dftly.nodes.base import _UnaryOp
+        >>> class AlsoLiteral(_UnaryOp):
+        ...     KEY = "also_literal"
+        ...     is_terminal = True
+        ...     pl_fn = pl.lit
+        ...     @classmethod
+        ...     def matches(cls, value): return Literal.matches(value)
+        ...     @classmethod
+        ...     def args_from_value(cls, value): return Literal.args_from_value(value)
+        >>> p = Parser({"literal": Literal, "also_literal": AlsoLiteral})
+        >>> p(42)
+        Traceback (most recent call last):
+            ...
+        ValueError: multiple matching nodes for ...
     """
 
     def __init__(self, registered_nodes: dict[str, NodeBase] = NODES):
@@ -297,6 +311,22 @@ class Parser:
             │ 10     │
             └────────┘
             >>> os.unlink(path)
+
+        It also works with Path objects:
+
+            >>> with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+            ...     _ = f.write("triple: '$x * 3'")
+            ...     _ = f.flush()
+            ...     exprs = Parser.to_polars(Path(f.name))
+            ...     pl.DataFrame({"x": [2]}).select(**exprs)
+            shape: (1, 1)
+            ┌────────┐
+            │ triple │
+            │ ---    │
+            │ i64    │
+            ╞════════╡
+            │ 6      │
+            └────────┘
 
         Non-dictionary YAML raises an error:
 
