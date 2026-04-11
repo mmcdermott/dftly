@@ -215,9 +215,8 @@ class DftlyGrammar(Transformer):
     def _discard_token(self, _: Token) -> Discard:
         return Discard
 
-    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = FORMAT_PFX = DOLLAR = (
-        QUESTION
-    ) = _discard_token
+    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
+    FORMAT_PFX = DOLLAR = QUESTION = _discard_token
 
     def NAME(self, val: Token) -> str:
         return str(val)
@@ -260,12 +259,14 @@ class DftlyGrammar(Transformer):
         return {"bare_word": items[0]}
 
     def strptime_nonstrict(self, items: list[Any]) -> dict:
-        from ..nodes.str import Strptime
-
         source, format_str = items
-        result = Strptime.from_lark([source, format_str])
-        result[Strptime.KEY]["strict"] = Literal.from_lark(False)
-        return result
+        return {
+            "strptime": {
+                "format": format_str,
+                "source": source,
+                "strict": Literal.from_lark(False),
+            }
+        }
 
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
