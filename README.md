@@ -188,6 +188,40 @@ Bare word 'TYPO' interpreted as string literal in a subexpression. Did you mean 
 
 ```
 
+## Design Philosophy
+
+Dftly expressions can be written in three equivalent forms. Understanding this hierarchy is key to using dftly
+effectively:
+
+1. **String form** -- Concise, human-readable syntax designed for YAML configs. Parsed by a Lark grammar.
+
+    ```yaml
+    sum: $col1 + $col2 * 3
+    ```
+
+2. **Dict/YAML form** -- The fully explicit base form. Every node type, argument, and keyword argument is
+    spelled out. This is the canonical representation that all other forms reduce to.
+
+    ```yaml
+    sum:
+      add:
+        - column: col1
+        - multiply:
+            - column: col2
+            - literal: 3
+    ```
+
+3. **Class form** -- Python objects, isomorphic to the dict form. Used for programmatic construction.
+
+    ```python
+    Add(Column("col1"), Multiply(Column("col2"), Literal(3)))
+    ```
+
+**All three forms produce the same internal AST and the same Polars expression.** The string form is syntactic
+sugar over the dict form; any expression you can write as a string can also be written as an equivalent
+dict/YAML structure. When in doubt about what a string expression means, look at its dict form -- that is the
+unambiguous specification.
+
 ## Detailed Documentation
 
 Internally, this simply parses the yaml file into a mapping, then treats the mapping as a map from desired
