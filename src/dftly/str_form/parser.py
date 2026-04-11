@@ -143,6 +143,17 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("'2023 01 01'::'%Y %m %d'")
         {'strptime': {'format': {'literal': '%Y %m %d'},
                       'source': {'literal': '2023 01 01'}}}
+
+    Non-strict strptime uses the ``?`` prefix on the format string:
+
+        >>> DftlyGrammar.parse_str('$dod::?"%Y-%m-%d %H:%M:%S"')
+        {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'},
+                      'source': {'column': 'dod'},
+                      'strict': {'literal': False}}}
+        >>> DftlyGrammar.parse_str('$dod as ?"%Y-%m-%d %H:%M:%S"')
+        {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'},
+                      'source': {'column': 'dod'},
+                      'strict': {'literal': False}}}
     """
 
     @classmethod
@@ -204,9 +215,8 @@ class DftlyGrammar(Transformer):
     def _discard_token(self, _: Token) -> Discard:
         return Discard
 
-    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = FORMAT_PFX = DOLLAR = (
-        _discard_token
-    )
+    IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
+    FORMAT_PFX = DOLLAR = QUESTION = _discard_token
 
     def NAME(self, val: Token) -> str:
         return str(val)
@@ -247,6 +257,13 @@ class DftlyGrammar(Transformer):
 
     def bare_word(self, items: list[Any]) -> dict:
         return {"bare_word": items[0]}
+
+    def strptime_nonstrict(self, items: list[Any]) -> dict:
+        from ..nodes.str import Strptime
+
+        result = Strptime.from_lark(items)
+        result[Strptime.KEY]["strict"] = Literal.from_lark(False)
+        return result
 
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items

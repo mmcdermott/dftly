@@ -306,10 +306,21 @@ class Strptime(KwargsOnlyFn):
 
         >>> pl.select(Strptime(format=Literal("%Y %H:%M"), source=Literal("2023 12:11")).polars_expr).item()
         datetime.datetime(2023, 1, 1, 12, 11)
+
+    Non-strict parsing produces null instead of raising on format mismatch:
+
+        >>> non_strict = Strptime(
+        ...     format=Literal("%Y-%m-%d %H:%M:%S"),
+        ...     source=Literal("2020-06-20"),
+        ...     strict=Literal(False),
+        ... )
+        >>> print(pl.select(non_strict.polars_expr).item())
+        None
     """
 
     KEY = "strptime"
     REQUIRED_KWARGS = {"format", "source"}
+    OPTIONAL_KWARGS = {"strict"}
 
     # See https://docs.rs/chrono/latest/chrono/format/strftime/index.html
     DATE_PARTS: ClassVar[set[str]] = {
@@ -417,11 +428,31 @@ class Strptime(KwargsOnlyFn):
             )
 
     @property
+    def strict(self) -> bool:
+        strict_node = self.kwargs.get("strict", None)
+        if strict_node is None:
+            return True  # default: strict=True for backwards compatibility
+        if not isinstance(strict_node, NodeBase):
+            raise ValueError(
+                "The strict argument must be a NodeBase instance that evaluates to a boolean."
+            )
+        try:
+            val = pl.select(strict_node.polars_expr).item()
+        except Exception as e:
+            raise ValueError("The strict argument must evaluate to a boolean.") from e
+        if not isinstance(val, bool):
+            raise ValueError(f"The strict argument must be a boolean, got {type(val)}")
+        return val
+
+    @property
     def polars_expr(self) -> pl.Expr:
         source_expr = self.kwargs["source"].polars_expr
+        strict = self.strict
 
         return source_expr.str.strptime(
-            dtype=DATE_TIME_TYPES[self.output_type], format=self.format_str
+            dtype=DATE_TIME_TYPES[self.output_type],
+            format=self.format_str,
+            strict=strict,
         )
 
     @classmethod
