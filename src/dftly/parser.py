@@ -314,11 +314,11 @@ class Parser:
 
         It also works with Path objects:
 
-            >>> with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            >>> with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
             ...     _ = f.write("triple: '$x * 3'")
-            ...     path = f.name
-            >>> exprs = Parser.to_polars(Path(path))
-            >>> pl.DataFrame({"x": [2]}).select(**exprs)
+            ...     _ = f.flush()
+            ...     exprs = Parser.to_polars(Path(f.name))
+            ...     pl.DataFrame({"x": [2]}).select(**exprs)
             shape: (1, 1)
             ┌────────┐
             │ triple │
@@ -327,7 +327,6 @@ class Parser:
             ╞════════╡
             │ 6      │
             └────────┘
-            >>> os.unlink(path)
 
         Non-dictionary YAML raises an error:
 
