@@ -264,7 +264,7 @@ class DftlyGrammar(Transformer):
             "strptime": {
                 "format": format_str,
                 "source": source,
-                "strict": Literal.from_lark(False),
+                "strict": {"literal": False},
             }
         }
 
