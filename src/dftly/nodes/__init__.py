@@ -12,6 +12,7 @@ from .arithmetic import (
     Mean,
     Min,
     Max,
+    Coalesce,
 )
 from .comparison import (
     GreaterThan,
@@ -37,6 +38,7 @@ __nodes = [
     Mean,
     Min,
     Max,
+    Coalesce,
     Add,
     Subtract,
     Multiply,
