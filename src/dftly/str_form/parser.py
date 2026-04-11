@@ -149,9 +149,10 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str('$dod::?"%Y-%m-%d %H:%M:%S"')
         {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}
 
-    Fallback format parsing tries multiple formats in sequence:
+    For fallback format parsing (trying multiple formats), compose ``coalesce()`` with non-strict
+    strptime — each building block reduces cleanly to its base form:
 
-        >>> DftlyGrammar.parse_str('$dod::"%Y-%m-%d %H:%M:%S", "%Y-%m-%d"')
+        >>> DftlyGrammar.parse_str('coalesce($dod::?"%Y-%m-%d %H:%M:%S", $dod::?"%Y-%m-%d")')
         {'coalesce': [{'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}, {'strptime': {'format': {'literal': '%Y-%m-%d'}, 'source': {'column': 'dod'}, 'strict': {'literal': False}}}]}
     """
 

@@ -456,19 +456,6 @@ class Strptime(KwargsOnlyFn):
 
     @classmethod
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
-        if len(items) == 2:
-            source, format = items
-            return {cls.KEY: {"format": format, "source": source}}
+        source, format = items
 
-        # Multiple formats: produce a coalesce of non-strict strptime calls
-        source = items[0]
-        formats = items[1:]
-        from .base import Literal
-
-        false_lit = Literal.from_lark(False)
-        strptime_nodes = []
-        for fmt in formats:
-            strptime_nodes.append(
-                {cls.KEY: {"format": fmt, "source": source, "strict": false_lit}}
-            )
-        return {"coalesce": strptime_nodes}
+        return {cls.KEY: {"format": format, "source": source}}

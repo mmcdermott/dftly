@@ -76,7 +76,7 @@ FROM.2: /from/i
 
 // Lowest precedence: global cast with `as`/`@` binds last
 ?global_cast: conditional AS NAME   -> cast_expr
-            | conditional AS STRING ("," STRING)* -> strptime
+            | conditional AS STRING -> strptime
             | conditional AS QUESTION STRING -> strptime_nonstrict
             | conditional AT TIME   -> binary_expr
             | conditional
@@ -101,7 +101,7 @@ FROM.2: /from/i
 
 // Higher precedence: local cast with `::` binds tighter than arithmetic
 ?local_cast: unary CAST NAME   -> cast_expr
-           | unary CAST STRING ("," STRING)* -> strptime
+           | unary CAST STRING -> strptime
            | unary CAST QUESTION STRING -> strptime_nonstrict
            | unary
 
