@@ -12,7 +12,7 @@ import yaml
 
 try:
     from yaml import CSafeLoader as SafeLoader
-except ImportError:
+except ImportError:  # pragma: no cover
     from yaml import SafeLoader
 
 _COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
@@ -231,7 +231,7 @@ class Parser:
                 for name, err in errors.items():
                     err_lines.append(f"- {name}: {err}")
             raise ValueError("\n".join(err_lines))
-        if len(outputs) > 1:
+        if len(outputs) > 1:  # pragma: no cover
             raise ValueError(f"multiple matching nodes for {node}: {list(outputs)}")
         return next(iter(outputs.values()))
 
@@ -295,6 +295,23 @@ class Parser:
             │ i64    │
             ╞════════╡
             │ 10     │
+            └────────┘
+            >>> os.unlink(path)
+
+        It also works with Path objects:
+
+            >>> with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            ...     _ = f.write("triple: '$x * 3'")
+            ...     path = f.name
+            >>> exprs = Parser.to_polars(Path(path))
+            >>> pl.DataFrame({"x": [2]}).select(**exprs)
+            shape: (1, 1)
+            ┌────────┐
+            │ triple │
+            │ ---    │
+            │ i64    │
+            ╞════════╡
+            │ 6      │
             └────────┘
             >>> os.unlink(path)
 

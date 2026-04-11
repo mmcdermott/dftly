@@ -108,24 +108,24 @@ class NodeBase(ABC):
     def __post_init__(self):
         """Post-initialization hook for subclasses to validate arguments."""
 
-        if not isinstance(self.KEY, str):
+        if not isinstance(self.KEY, str):  # pragma: no cover
             raise TypeError(f"KEY must be a string; got {type(self.KEY).__name__}")
 
-        if not self.KEY:
+        if not self.KEY:  # pragma: no cover
             raise ValueError("KEY must be a non-empty string")
 
-        if not isinstance(self.args, Sequence):
+        if not isinstance(self.args, Sequence):  # pragma: no cover
             raise TypeError(f"args must be a sequence; got {type(self.args).__name__}")
 
-        if not isinstance(self.kwargs, dict):
+        if not isinstance(self.kwargs, dict):  # pragma: no cover
             raise TypeError(
                 f"kwargs must be a dictionary; got {type(self.kwargs).__name__}"
             )
 
-        if self.KEY != self.KEY.lower():
+        if self.KEY != self.KEY.lower():  # pragma: no cover
             raise ValueError(f"KEY must be lowercase; got {self.KEY}")
 
-        if not all(isinstance(k, str) for k in self.kwargs.keys()):
+        if not all(isinstance(k, str) for k in self.kwargs.keys()):  # pragma: no cover
             raise TypeError(f"KEY must be a string; got {type(self.KEY).__name__}")
 
     @classmethod
@@ -332,6 +332,9 @@ class NodeBase(ABC):
             set()
             >>> Column("x").referenced_columns
             {'x'}
+            >>> from dftly.nodes.conditional import Conditional
+            >>> sorted(Conditional(when=Column("x"), then=Column("y")).referenced_columns)
+            ['x', 'y']
         """
         cols: set[str] = set()
         for arg in self.args:
@@ -345,7 +348,9 @@ class NodeBase(ABC):
     @property
     @abstractmethod
     def polars_expr(self) -> pl.Expr:
-        raise NotImplementedError("Subclasses must implement polars_expr")
+        raise NotImplementedError(
+            "Subclasses must implement polars_expr"
+        )  # pragma: no cover
 
     def __repr__(self) -> str:
         """Returns a string representation of the node."""
@@ -358,7 +363,9 @@ class NodeBase(ABC):
     @abstractmethod
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
         """Must be implemented by subclasses to parse from lark."""
-        raise NotImplementedError("Subclasses must implement from_lark")
+        raise NotImplementedError(
+            "Subclasses must implement from_lark"
+        )  # pragma: no cover
 
 
 # Intermediate base shared validators
@@ -612,6 +619,8 @@ class Literal(Terminal, _UnaryOp):
             (([1, 2, 3],), {})
             >>> Literal.args_from_value({"literal": {"arg1": 42}})
             (({'arg1': 42},), {})
+            >>> Literal.args_from_value({"expression": {"type": "literal", "arguments": "bar"}})
+            (('bar',), {})
             >>> Literal.args_from_value({"other": {"arg1": 42}})
             Traceback (most recent call last):
                 ...

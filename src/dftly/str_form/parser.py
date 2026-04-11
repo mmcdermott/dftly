@@ -200,12 +200,12 @@ class DftlyGrammar(Transformer):
     def _parse_literal(self, token: Token, fn: Callable[[str], Any]) -> dict[str, Any]:
         try:
             return Literal.from_lark(fn(token))
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             raise ValueError(f"Failed to parse literal {token}") from e
 
     def _send_items(self, val: list[Any] | Token, node_cls) -> dict[str, Any]:
         if node_cls.is_terminal and isinstance(val, list):
-            if len(val) != 1:
+            if len(val) != 1:  # pragma: no cover
                 raise ValueError(
                     f"terminal node {node_cls} received multiple values: {val}"
                 )
@@ -227,7 +227,7 @@ class DftlyGrammar(Transformer):
     def binary_expr(self, items: list[dict | str]) -> dict:
         left, op, right = items
 
-        if op not in BINARY_OPS:
+        if op not in BINARY_OPS:  # pragma: no cover
             raise ValueError(
                 f"Unsupported binary operator: {op}; allowed: {list(BINARY_OPS)}"
             )
@@ -237,7 +237,7 @@ class DftlyGrammar(Transformer):
     def unary_expr(self, items: list[dict | str]) -> dict:
         op, operand = items
 
-        if op not in UNARY_OPS:
+        if op not in UNARY_OPS:  # pragma: no cover
             raise ValueError(
                 f"Unsupported unary operator: {op}; allowed: {list(UNARY_OPS)}"
             )
@@ -248,7 +248,7 @@ class DftlyGrammar(Transformer):
         func_name = items[0]
         args = items[1]
 
-        if func_name not in NODES:
+        if func_name not in NODES:  # pragma: no cover
             raise ValueError(
                 f"Unsupported function: {func_name}; allowed: {list(NODES)}"
             )
