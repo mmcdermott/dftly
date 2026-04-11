@@ -1,4 +1,4 @@
-from .nodes.base import NodeBase
+from .nodes.base import Column, Literal, NodeBase
 from pathlib import Path
 import re
 import warnings
@@ -41,6 +41,43 @@ def extract_columns(expr: str) -> set[str]:
         ['col1', 'col2']
     """
     return set(_COLUMN_RE.findall(expr))
+
+
+def is_expression(
+    value: str, input_schema: dict[str, str | None] | None = None
+) -> bool:
+    """Check whether a string is a compound dftly expression (not a plain literal or column).
+
+    Returns ``True`` when *value* parses successfully as something other than a bare
+    :class:`~dftly.nodes.base.Literal` or :class:`~dftly.nodes.base.Column`.  Returns
+    ``False`` for plain literals, bare column references, and strings that fail to parse.
+
+    Args:
+        value: The string to check.
+        input_schema: Accepted for forward-compatible API use but currently unused.
+
+    Returns:
+        ``True`` if the value is a compound expression, ``False`` otherwise.
+
+    Examples:
+        >>> is_expression("timestamp")
+        False
+        >>> is_expression("ADMISSION")
+        False
+        >>> is_expression("col1 + col2")
+        True
+        >>> is_expression("hash(mrn)")
+        True
+        >>> is_expression("broken >< syntax")
+        False
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            node = Parser()(value)
+    except ValueError:
+        return False
+    return not isinstance(node, (Literal, Column))
 
 
 class Parser:
