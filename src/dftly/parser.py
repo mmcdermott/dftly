@@ -50,17 +50,12 @@ class Parser:
     used like a function through its `__call__` method, which takes a single value and returns a single node.
 
     Args:
-        registered_nodes: A dictionary mapping node names to NodeBase subclasses. These nodes will be
-          considered when parsing a value.
+        registered_nodes: A dictionary mapping node names to NodeBase subclasses. These nodes will
+            be considered when parsing a value.
 
     Raises:
         TypeError: If any registered node is not a subclass of NodeBase.
         ValueError: If multiple registered nodes share the same KEY.
-        ValueError: If no registered nodes match the input value, multiple registered nodes match the input
-          value, or if a matching node raises an error during parsing.
-
-    Returns:
-        A NodeBase subclass instance parsed from the input value.
 
     Examples:
         >>> from dftly.nodes import Add, Multiply, Subtract, Literal

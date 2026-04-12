@@ -1,0 +1,51 @@
+site_name: dftly
+site_description: A simple, expressive, human-readable DSL for encoding tabular transformations over dataframes.
+site_url: https://dftly.readthedocs.io/
+repo_url: https://github.com/mmcdermott/dftly
+repo_name: mmcdermott/dftly
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+
+nav:
+  - Home: index.md
+  - Design Philosophy: design.md
+  - Usage Guide: usage.md
+  - API Reference: api.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            members_order: source
+            docstring_style: google
+            merge_init_into_class: true
