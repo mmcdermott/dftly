@@ -113,6 +113,14 @@ class Cast(BinaryOp):
             ...
         ValueError: Unsupported type: unsupported_type
 
+    A non-evaluatable type argument raises an error:
+
+        >>> from dftly.nodes import Column
+        >>> Cast(Literal("3"), Column("x"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The right node of a Cast operation must evaluate to a string literal.
+
     This class can also be used to convert numeric types into duration types by specifying their unit:
 
         >>> pl.select(Cast(Literal(3), Literal("days")).polars_expr).item()

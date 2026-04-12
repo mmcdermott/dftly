@@ -154,6 +154,31 @@ class DftlyGrammar(Transformer):
         {'strptime': {'format': {'literal': '%Y-%m-%d %H:%M:%S'},
                       'source': {'column': 'dod'},
                       'strict': {'literal': False}}}
+
+    The transformer methods validate their inputs when called directly:
+
+        >>> from lark import Token
+        >>> g = DftlyGrammar()
+        >>> g._parse_literal(Token("NUMBER", "abc"), int)
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to parse literal abc
+        >>> g._send_items([{"literal": 1}, {"literal": 2}], Literal)
+        Traceback (most recent call last):
+            ...
+        ValueError: terminal node ... received multiple values: ...
+        >>> g.binary_expr([{"literal": 1}, "INVALID", {"literal": 2}])
+        Traceback (most recent call last):
+            ...
+        ValueError: Unsupported binary operator: INVALID...
+        >>> g.unary_expr(["INVALID", {"literal": 1}])
+        Traceback (most recent call last):
+            ...
+        ValueError: Unsupported unary operator: INVALID...
+        >>> g.func(["nonexistent_func", [{"literal": 1}]])
+        Traceback (most recent call last):
+            ...
+        ValueError: Unsupported function: nonexistent_func...
     """
 
     @classmethod

@@ -43,7 +43,14 @@ class Hash(ArgsOnlyFn):
 
     @classmethod
     def from_lark(cls, items):
-        """Wrap single-argument lark results in a list for consistent handling."""
+        """Wrap single-argument lark results in a list for consistent handling.
+
+        Examples:
+            >>> Hash.from_lark([{"literal": 42}])
+            {'hash': [{'literal': 42}]}
+            >>> Hash.from_lark({"literal": 42})
+            {'hash': [{'literal': 42}]}
+        """
         if not isinstance(items, list):
             items = [items]
         return {cls.KEY: items}

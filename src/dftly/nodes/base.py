@@ -25,6 +25,102 @@ class NodeBase(ABC):
 
     Nodes are the base class of our minimal abstract syntax tree (AST) for representing the set of data
     transformation operations we support.
+
+    The ``__post_init__`` hook validates that subclasses define a valid KEY and receive valid arguments:
+
+        >>> class BadKeyType(NodeBase):
+        ...     KEY = 123
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKeyType()
+        Traceback (most recent call last):
+            ...
+        TypeError: KEY must be a string; got int
+        >>> class EmptyKey(NodeBase):
+        ...     KEY = ""
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> EmptyKey()
+        Traceback (most recent call last):
+            ...
+        ValueError: KEY must be a non-empty string
+        >>> class UpperKey(NodeBase):
+        ...     KEY = "UPPER"
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> UpperKey()
+        Traceback (most recent call last):
+            ...
+        ValueError: KEY must be lowercase; got UPPER
+
+    Subclasses that corrupt args/kwargs before calling super are caught:
+
+        >>> class BadArgs(NodeBase):
+        ...     KEY = "badargs"
+        ...     def __post_init__(self):
+        ...         self.args = 42
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadArgs()
+        Traceback (most recent call last):
+            ...
+        TypeError: args must be a sequence; got int
+        >>> class BadKwargs(NodeBase):
+        ...     KEY = "badkwargs"
+        ...     def __post_init__(self):
+        ...         self.kwargs = "not a dict"
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKwargs()
+        Traceback (most recent call last):
+            ...
+        TypeError: kwargs must be a dictionary; got str
+        >>> class BadKwargKeys(NodeBase):
+        ...     KEY = "badkwargkeys"
+        ...     def __post_init__(self):
+        ...         self.kwargs = {1: "val"}
+        ...         super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): pass
+        ...     @classmethod
+        ...     def from_lark(cls, items): pass
+        >>> BadKwargKeys()
+        Traceback (most recent call last):
+            ...
+        TypeError: KEY must be a string; ...
+
+    The abstract methods raise ``NotImplementedError`` when called directly:
+
+        >>> class Concrete(NodeBase):
+        ...     KEY = "concrete"
+        ...     def __post_init__(self): super().__post_init__()
+        ...     @property
+        ...     def polars_expr(self): return NodeBase.polars_expr.fget(self)
+        ...     @classmethod
+        ...     def from_lark(cls, items): return {}
+        >>> Concrete().polars_expr
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Subclasses must implement polars_expr
+        >>> NodeBase.from_lark([])
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: Subclasses must implement from_lark
     """
 
     KEY: ClassVar[str]
@@ -332,6 +428,9 @@ class NodeBase(ABC):
             set()
             >>> Column("x").referenced_columns
             {'x'}
+            >>> from dftly.nodes.conditional import Conditional
+            >>> sorted(Conditional(when=Column("x"), then=Column("y")).referenced_columns)
+            ['x', 'y']
         """
         cols: set[str] = set()
         for arg in self.args:
@@ -612,6 +711,8 @@ class Literal(Terminal, _UnaryOp):
             (([1, 2, 3],), {})
             >>> Literal.args_from_value({"literal": {"arg1": 42}})
             (({'arg1': 42},), {})
+            >>> Literal.args_from_value({"expression": {"type": "literal", "arguments": "bar"}})
+            (('bar',), {})
             >>> Literal.args_from_value({"other": {"arg1": 42}})
             Traceback (most recent call last):
                 ...

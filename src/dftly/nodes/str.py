@@ -57,6 +57,34 @@ class StringInterpolate(ArgsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: StringInterpolate requires more than one argument; ...
+
+    A pattern that cannot be evaluated as a literal raises an error:
+
+        >>> StringInterpolate(Column("x"), Column("name"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The pattern argument must be a string, Literal, or Literal-evaluatable instance. ...
+
+    A non-string pattern raises an error:
+
+        >>> StringInterpolate(Literal(42), Column("name"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The pattern argument must be a string, ...
+
+    The ``from_lark`` method requires exactly one argument:
+
+        >>> StringInterpolate.from_lark(["a", "b"])
+        Traceback (most recent call last):
+            ...
+        ValueError: StringInterpolate.from_lark only accepts a single argument...
+
+    A non-literal dict in ``from_lark`` raises an error:
+
+        >>> StringInterpolate.from_lark([{"column": "x"}])
+        Traceback (most recent call last):
+            ...
+        ValueError: When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node.
     """
 
     KEY = "string_interpolate"
@@ -177,6 +205,34 @@ class RegexExtract(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: The group_index argument must be a non-negative integer.
+
+    A non-integer group index raises an error:
+
+        >>> RegexExtract(pattern=Literal(r"\\d+"), source=Literal("abc"), group_index=Literal("x"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be an integer...
+
+    A non-NodeBase group index raises an error:
+
+        >>> RegexExtract(pattern=Literal(r"\\d+"), source=Literal("abc"), group_index="bad")
+        Traceback (most recent call last):
+            ...
+        TypeError: all keyword arguments to regex_extract must be str:NodeBase pairs
+
+    The group_index property validates its input type and evaluatability:
+
+        >>> node = RegexExtract(pattern=Literal(r"\\d+"), source=Literal("abc"))
+        >>> node.kwargs["group_index"] = "not_a_node"
+        >>> node.group_index
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be an integer or a NodeBase instance ...Got <class 'str'>...
+        >>> node.kwargs["group_index"] = Column("x")
+        >>> node.group_index
+        Traceback (most recent call last):
+            ...
+        ValueError: The group_index argument must be an integer or a NodeBase instance ...can't be evaluated...
     """
 
     KEY = "regex_extract"
@@ -234,9 +290,9 @@ class RegexExtract(KwargsOnlyFn):
 class RegexMatch(KwargsOnlyFn):
     """This node matches a regex pattern against a target node.
 
-    This node only accepts keyword arguments, and requires "pattern" and "from" keys. The "pattern" key is the
-    regex pattern to match, and the "from" key is the target node to match against. The result is a boolean
-    indicating whether the pattern matches the target.
+    This node only accepts keyword arguments, and requires "pattern" and "source" keys. The "pattern" key is
+    the regex pattern to match, and the "source" key is the target node to match against. The result is a
+    boolean indicating whether the pattern matches the target.
 
     Example:
         >>> from dftly.nodes import Literal, Column
@@ -316,6 +372,52 @@ class Strptime(KwargsOnlyFn):
         ... )
         >>> print(pl.select(non_strict.polars_expr).item())
         None
+
+    A non-string format raises an error:
+
+        >>> Strptime(format=Literal(42), source=Literal("2023-01-01"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The format argument must be a NodeBase instance that evaluates to a string. ...
+
+    A format with no date or time components raises an error:
+
+        >>> Strptime(format=Literal("hello"), source=Literal("world")).polars_expr
+        Traceback (most recent call last):
+            ...
+        ValueError: The format string must contain at least one date or time component. ...
+
+    A non-boolean strict value raises an error:
+
+        >>> Strptime(format=Literal("%Y-%m-%d"), source=Literal("2023-01-01"), strict=Literal("yes")).polars_expr
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must be a boolean, ...
+
+    The format_str and strict properties validate their input types:
+
+        >>> from dftly.nodes import Column
+        >>> node = Strptime(format=Literal("%Y-%m-%d"), source=Literal("2023-01-01"))
+        >>> node.kwargs["format"] = "not_a_node"
+        >>> node.format_str
+        Traceback (most recent call last):
+            ...
+        ValueError: The format argument must be a NodeBase instance ...Got <class 'str'>...
+        >>> node.kwargs["format"] = Column("x")
+        >>> node.format_str
+        Traceback (most recent call last):
+            ...
+        ValueError: The format argument must be a NodeBase instance ...can't be evaluated...
+        >>> node.kwargs["strict"] = "not_a_node"
+        >>> node.strict
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must be a NodeBase instance ...
+        >>> node.kwargs["strict"] = Column("x")
+        >>> node.strict
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must evaluate to a boolean.
     """
 
     KEY = "strptime"
