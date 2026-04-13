@@ -62,7 +62,7 @@ class Hash(ArgsOnlyFn):
         return self.args[0].polars_expr.hash()
 
 
-class SignedHash(Hash):
+class SignedHash(ArgsOnlyFn):
     """This non-terminal node computes a signed (Int64) hash of the input expression.
 
     The result is an Int64 value produced by reinterpreting Polars' native UInt64 hash as a
@@ -73,6 +73,10 @@ class SignedHash(Hash):
 
     Use this when landing into an Int64-typed column (e.g. MEDS ``subject_id``).
 
+    This node is a sibling of :class:`Hash` rather than a subclass: subclassing would cause
+    a class-form ``SignedHash(...)`` instance to match ``Hash`` as well (via
+    ``isinstance``-based form detection) and raise a multiple-matches error in the parser.
+
     Example:
         >>> from dftly.nodes import Literal
         >>> pl.select(SignedHash(Literal("hello")).polars_expr).dtypes
@@ -82,12 +86,20 @@ class SignedHash(Hash):
         >>> signed == (unsigned - (1 << 64) if unsigned >= (1 << 63) else unsigned)
         True
 
-    It also parses from string form via the function-call grammar:
+    It parses from string form via the function-call grammar:
 
         >>> from dftly import Parser
         >>> df = pl.DataFrame({"mrn": ["abc", "def"]})
         >>> df.select(**Parser.to_polars({"subject_id": "signed_hash($mrn)"})).dtypes
         [Int64]
+
+    Class-form inputs (including prebuilt and nested instances) round-trip unambiguously
+    — a ``SignedHash`` is not mistaken for a ``Hash``:
+
+        >>> Parser()(SignedHash(Literal("hello")))
+        SignedHash(Literal('hello'))
+        >>> Parser()({"add": [Literal(1), SignedHash(Literal("hello"))]})
+        Add(Literal(1), SignedHash(Literal('hello')))
 
     Only one argument is accepted:
 
@@ -98,6 +110,27 @@ class SignedHash(Hash):
     """
 
     KEY = "signed_hash"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        """Wrap single-argument lark results in a list for consistent handling.
+
+        Examples:
+            >>> SignedHash.from_lark([{"literal": 42}])
+            {'signed_hash': [{'literal': 42}]}
+            >>> SignedHash.from_lark({"literal": 42})
+            {'signed_hash': [{'literal': 42}]}
+        """
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
 
     @property
     def polars_expr(self) -> pl.Expr:
