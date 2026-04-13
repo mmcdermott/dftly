@@ -1,6 +1,7 @@
 from .base import BinaryOp, UnaryOp, Literal, Column, NodeBase
 from .arithmetic import (
     Hash,
+    SignedHash,
     Not,
     Negate,
     And,
@@ -31,6 +32,7 @@ __nodes = [
     Literal,
     Column,
     Hash,
+    SignedHash,
     Not,
     Negate,
     And,
