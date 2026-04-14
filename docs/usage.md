@@ -202,14 +202,17 @@ parsed:
       column: date
 ```
 
-## Utility Functions
+## Introspection
 
-### extract_columns
+### Referenced columns
 
-Extract column names from an expression string without parsing:
+To find which columns an expression depends on, parse it and read
+`referenced_columns` from the resulting node. This walks the AST, so it
+sees through `f"..."` interpolation, nested function calls, and dict/class
+forms — and won't be fooled by `$` appearing inside a string literal.
 
 ```python
-from dftly import extract_columns
+from dftly import Parser
 
-extract_columns("$a + $b * 3")  # {'a', 'b'}
+Parser()("$a + $b * 3").referenced_columns  # {'a', 'b'}
 ```

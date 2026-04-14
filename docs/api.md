@@ -11,8 +11,6 @@
         - to_polars
         - expr_to_polars
 
-::: dftly.extract_columns
-
 ## Node Types
 
 ### Terminal Nodes
