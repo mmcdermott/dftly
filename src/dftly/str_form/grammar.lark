@@ -8,9 +8,10 @@
 //   5. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
 //   6. additive       — `+`, `-`
 //   7. multiplicative — `*`, `/`
-//   8. local_cast     — `::type` / `::'%fmt'`
-//   9. unary          — `not`, `!`, unary `+`/`-`
-//  10. primary        — literals, columns, function calls, regex, parenthesized expressions
+//   8. exp_expr       — `**` (right-associative)
+//   9. local_cast     — `::type` / `::'%fmt'`
+//  10. unary          — `not`, `!`, unary `+`/`-`
+//  11. primary        — literals, columns, function calls, regex, parenthesized expressions
 //
 // Priority annotations (e.g. `.1`, `.2`) on terminals resolve lexer ambiguities:
 // higher priority terminals are preferred when multiple patterns match the same input.
@@ -37,6 +38,7 @@ PLUS: "+"
 MINUS: "-"
 TIMES: "*"
 DIV: "/"
+POWER: "**"
 DOLLAR: "$"
 AT: "@"
 EQ: "=="
@@ -96,8 +98,16 @@ FROM.2: /from/i
 ?additive: additive (PLUS|MINUS) multiplicative   -> binary_expr
          | multiplicative
 
-?multiplicative: multiplicative (TIMES|DIV) local_cast  -> binary_expr
-               | local_cast
+?multiplicative: multiplicative (TIMES|DIV) exp_expr  -> binary_expr
+               | exp_expr
+
+// Exponentiation: binds tighter than `*`/`/`, right-associative.
+// Note: `-2 ** 2` parses as `(-2) ** 2 = 4`, not Python's `-(2**2) = -4`.
+// This differs from Python/NumPy but matches Fortran/Excel and falls out of
+// the grammar naturally without restructuring unary/cast precedence.
+// Use explicit parens if you want `-(x**2)`.
+?exp_expr: local_cast POWER exp_expr  -> binary_expr
+         | local_cast
 
 // Higher precedence: local cast with `::` binds tighter than arithmetic
 ?local_cast: unary CAST NAME   -> cast_expr
