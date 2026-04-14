@@ -103,7 +103,8 @@ min($a, $b, $c)       # minimum
 max($a, $b, $c)       # maximum
 mean($a, $b)          # mean
 coalesce($a, $b)      # first non-null value
-hash($a)              # hash to integer
+hash($a)              # hash to UInt64
+signed_hash($a)       # hash to Int64 (for Int64-typed output schemas)
 ```
 
 ### String operations

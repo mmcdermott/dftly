@@ -63,6 +63,10 @@
     options:
       show_source: false
 
+::: dftly.nodes.arithmetic.SignedHash
+    options:
+      show_source: false
+
 ::: dftly.nodes.arithmetic.Negate
     options:
       show_source: false
