@@ -1,6 +1,5 @@
 from .nodes.base import NodeBase
 from pathlib import Path
-import re
 import warnings
 import polars as pl
 from .nodes import NODES
@@ -11,33 +10,6 @@ from .str_form.parser import DftlyGrammar
 import yaml
 
 SafeLoader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-
-_COLUMN_RE = re.compile(r"\$([A-Za-z_]\w*)")
-
-
-def extract_columns(expr: str) -> set[str]:
-    """Extract column names referenced in a dftly expression string.
-
-    This uses a lightweight regex scan for ``$identifier`` patterns, so it works without parsing the
-    expression. Useful when you need to know which columns an expression depends on before building a schema.
-
-    Args:
-        expr: A dftly expression string.
-
-    Returns:
-        A set of column names.
-
-    Examples:
-        >>> sorted(extract_columns("$a + $b * 3"))
-        ['a', 'b']
-        >>> extract_columns("f'hello {$name}'")
-        {'name'}
-        >>> extract_columns("1 + 2")
-        set()
-        >>> sorted(extract_columns("$col1 > 0 and $col2 != $col1"))
-        ['col1', 'col2']
-    """
-    return set(_COLUMN_RE.findall(expr))
 
 
 class Parser:
