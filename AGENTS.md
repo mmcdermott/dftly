@@ -88,7 +88,7 @@ explicit.
 
 ```
 src/dftly/
-  __init__.py          -- Public API: Parser, extract_columns
+  __init__.py          -- Public API: Parser
   parser.py            -- Parser class (dict/YAML/string -> Node objects)
   nodes/
     __init__.py         -- Node registration (NODES dict, BINARY_OPS, UNARY_OPS)
@@ -239,7 +239,7 @@ pre-commit run --all-files
 | File                              | Purpose                                                |
 | --------------------------------- | ------------------------------------------------------ |
 | `src/dftly/__init__.py`           | Public API exports                                     |
-| `src/dftly/parser.py`             | Parser class, `extract_columns`, `is_expression`       |
+| `src/dftly/parser.py`             | Parser class and YAML/dict entry points                |
 | `src/dftly/nodes/base.py`         | NodeBase hierarchy and terminal nodes                  |
 | `src/dftly/nodes/__init__.py`     | Node registration (`NODES`, `BINARY_OPS`, `UNARY_OPS`) |
 | `src/dftly/str_form/grammar.lark` | LALR(1) expression grammar                             |
