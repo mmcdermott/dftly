@@ -10,7 +10,9 @@ import polars as pl
 class Hash(ArgsOnlyFn):
     """This non-terminal node computes a hash of the input expression.
 
-    The result is a UInt64 value (Polars' native hash type). Use ``::int64`` to cast to signed if needed.
+    The result is a UInt64 value (Polars' native hash type). For schemas requiring Int64 (e.g.
+    MEDS ``subject_id``), use :class:`SignedHash` instead — a plain ``::int64`` cast silently
+    nulls values above ``i64.max``.
 
     Example:
         >>> from dftly.nodes import Literal
@@ -58,6 +60,81 @@ class Hash(ArgsOnlyFn):
     @property
     def polars_expr(self) -> pl.Expr:
         return self.args[0].polars_expr.hash()
+
+
+class SignedHash(ArgsOnlyFn):
+    """This non-terminal node computes a signed (Int64) hash of the input expression.
+
+    The result is an Int64 value produced by reinterpreting Polars' native UInt64 hash as a
+    two's-complement signed integer. This preserves the full bit pattern — unlike a
+    ``::int64`` cast, which silently nulls values above ``i64.max`` — at the cost of changing
+    the numeric value for roughly half of inputs. Downstream consumers that compute hashes
+    outside dftly will only get bit-compatible values if they also reinterpret.
+
+    Use this when landing into an Int64-typed column (e.g. MEDS ``subject_id``).
+
+    This node is a sibling of :class:`Hash` rather than a subclass: subclassing would cause
+    a class-form ``SignedHash(...)`` instance to match ``Hash`` as well (via
+    ``isinstance``-based form detection) and raise a multiple-matches error in the parser.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(SignedHash(Literal("hello")).polars_expr).dtypes
+        [Int64]
+        >>> unsigned = pl.select(Hash(Literal("hello")).polars_expr).item()
+        >>> signed = pl.select(SignedHash(Literal("hello")).polars_expr).item()
+        >>> signed == (unsigned - (1 << 64) if unsigned >= (1 << 63) else unsigned)
+        True
+
+    It parses from string form via the function-call grammar:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"mrn": ["abc", "def"]})
+        >>> df.select(**Parser.to_polars({"subject_id": "signed_hash($mrn)"})).dtypes
+        [Int64]
+
+    Class-form inputs (including prebuilt and nested instances) round-trip unambiguously
+    — a ``SignedHash`` is not mistaken for a ``Hash``:
+
+        >>> Parser()(SignedHash(Literal("hello")))
+        SignedHash(Literal('hello'))
+        >>> Parser()({"add": [Literal(1), SignedHash(Literal("hello"))]})
+        Add(Literal(1), SignedHash(Literal('hello')))
+
+    Only one argument is accepted:
+
+        >>> SignedHash(Literal("a"), Literal("b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: signed_hash requires exactly one argument; got 2
+    """
+
+    KEY = "signed_hash"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        """Wrap single-argument lark results in a list for consistent handling.
+
+        Examples:
+            >>> SignedHash.from_lark([{"literal": 42}])
+            {'signed_hash': [{'literal': 42}]}
+            >>> SignedHash.from_lark({"literal": 42})
+            {'signed_hash': [{'literal': 42}]}
+        """
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        return self.args[0].polars_expr.hash().reinterpret(signed=True)
 
 
 class Not(UnaryOp):
