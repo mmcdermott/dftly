@@ -49,9 +49,12 @@ class _DtAccessor(ArgsOnlyFn):
     - ``KEY``: the function-call and dict-form name (e.g. ``"dt_hour_of_day"``).
       Prefixed with ``dt_`` to prevent collisions with unrelated nodes.
     - ``PL_METHOD``: the polars ``.dt.*`` method name (e.g. ``"hour"``).
-    - ``CAST_NAME``: the RHS name accepted by ``::`` cast syntax (e.g. ``"hour_of_day"``).
-      May be ``None`` if cast form is unavailable (e.g. ``DtYear`` — ``::year`` is already
-      the integer→date cast).
+    - ``CAST_NAME``: the RHS name accepted by cast syntax in both ``::`` and ``as`` forms
+      (e.g. ``"hour_of_day"`` → ``$event::hour_of_day`` or ``$event as hour_of_day``).
+      Accessor dispatch is shared between both cast operators because they are semantically
+      equivalent in dftly and differ only in grammar precedence. May be ``None`` if no
+      cast form is wanted; set ``None`` when the accessor should only be reachable via
+      the function-call form (``dt_<name>($x)``).
 
     The shared arity-1 validation, ``from_lark`` wrapping, and ``polars_expr`` dispatch all
     live here. Subclasses are typically four lines each.
@@ -217,12 +220,24 @@ class DtHourOfDay(_DtAccessor):
         >>> pl.select(DtHourOfDay(Literal(datetime(2024, 6, 15, 14, 30))).polars_expr).item()
         14
 
-    Cast form (the primary ergonomic path):
+    Cast form (the primary ergonomic path) — works in both the ``::`` and ``as`` cast
+    forms, which are semantically equivalent in dftly and differ only in grammar
+    precedence (``::`` binds tight, ``as`` binds loose):
 
         >>> from dftly import Parser
         >>> df = pl.DataFrame({"event": [datetime(2024, 6, 15, 14, 30)]})
         >>> df.select(h=Parser.expr_to_polars("$event::hour_of_day"))["h"].item()
         14
+        >>> df.select(h=Parser.expr_to_polars("$event as hour_of_day"))["h"].item()
+        14
+
+    Both forms parse to the same accessor node:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("$event::hour_of_day")
+        {'dt_hour_of_day': [{'column': 'event'}]}
+        >>> DftlyGrammar.parse_str("$event as hour_of_day")
+        {'dt_hour_of_day': [{'column': 'event'}]}
 
     Function form:
 
