@@ -10,7 +10,7 @@ authors = [
 ]
 description = "dftly (pronounced deftly) is a simple library for a safe, expressive, config-file friendly, and readable DSL for encoding simple dataframe operations."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
