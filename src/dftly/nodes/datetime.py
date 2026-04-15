@@ -105,26 +105,38 @@ class _DtAccessor(ArgsOnlyFn):
 class DtYear(_DtAccessor):
     """Extract the calendar year (e.g. ``2024``) from a datetime or date.
 
-    **Cast form unavailable**: ``::year`` is already the integer→date construction
-    (``2024::year`` → ``date(2024, 1, 1)``). Use ``dt_year($event)`` in function-call form
-    instead.
+    The cast form is ``::year_of_date``, not ``::year``: ``::year`` is already the
+    integer→date construction (``2024::year`` → ``date(2024, 1, 1)``). The
+    ``year_of_date`` name keeps the direction unambiguous — "the year component of a
+    date" — and stays consistent with the ``_of_`` naming pattern used by the rest of
+    the datetime accessor family.
 
     Example:
         >>> from dftly.nodes import Literal
         >>> pl.select(DtYear(Literal(datetime(2024, 6, 15, 14, 30))).polars_expr).item()
         2024
 
-    Function-call string form:
+    Cast form:
 
         >>> from dftly import Parser
         >>> df = pl.DataFrame({"event": [datetime(2024, 6, 15, 14, 30)]})
+        >>> df.select(y=Parser.expr_to_polars("$event::year_of_date"))["y"].item()
+        2024
+
+    Function form:
+
         >>> df.select(y=Parser.expr_to_polars("dt_year($event)"))["y"].item()
         2024
+
+    ``::year`` still resolves to the integer→date constructor, not this accessor:
+
+        >>> pl.select(Parser.expr_to_polars("2024::year")).item()
+        datetime.date(2024, 1, 1)
     """
 
     KEY = "dt_year"
     PL_METHOD = "year"
-    # CAST_NAME intentionally None — `::year` is already int→date construction.
+    CAST_NAME = "year_of_date"
 
 
 class DtMonthOfYear(_DtAccessor):
