@@ -103,9 +103,13 @@ FROM.2: /from/i
 
 // Exponentiation: binds tighter than `*`/`/`, right-associative.
 // Note: `-2 ** 2` parses as `(-2) ** 2 = 4`, not Python's `-(2**2) = -4`.
-// This differs from Python/NumPy but matches Fortran/Excel and falls out of
-// the grammar naturally without restructuring unary/cast precedence.
-// Use explicit parens if you want `-(x**2)`.
+// This differs from Python/NumPy but matches Excel and falls out of the
+// grammar naturally without restructuring unary/cast precedence.
+// Chained consequence: `2 ** -3 ** 2` parses as `2 ** ((-3) ** 2) = 512`,
+// whereas Python gives `2 ** -(3**2) = 1/512`. Right-associativity of `**`
+// itself is preserved (`2 ** 3 ** 2 == 2 ** 9`); the difference is that
+// unary minus binds to the adjacent literal rather than the whole power.
+// Use explicit parens if you want the Python interpretation.
 ?exp_expr: local_cast POWER exp_expr  -> binary_expr
          | local_cast
 

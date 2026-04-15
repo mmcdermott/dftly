@@ -302,12 +302,30 @@ class Power(BinaryOp):
         >>> pl.select(Parser.expr_to_polars("2 ** 3 ** 2")).item()
         512
 
-    Unary minus on the left binds tighter than ``**``:
+    Unary minus binds tighter than ``**``, attaching to the adjacent literal rather than
+    the whole power. This applies wherever unary minus appears, including inside chained
+    exponents:
 
         >>> pl.select(Parser.expr_to_polars("-2 ** 2")).item()
         4
         >>> pl.select(Parser.expr_to_polars("-(2 ** 2)")).item()
         -4
+        >>> pl.select(Parser.expr_to_polars("2.0 ** -3 ** 2")).item()
+        512.0
+        >>> pl.select(Parser.expr_to_polars("2.0 ** -(3 ** 2)")).item()
+        0.001953125
+
+    Right-associativity of ``**`` itself is preserved — ``2 ** 3 ** 2`` is ``2 ** (3 ** 2)
+    == 512``. In ``2 ** -3 ** 2``, ``-3`` is consumed by unary minus before ``**``
+    associates, so it parses as ``2 ** ((-3) ** 2) == 2 ** 9 == 512``. Python's rule binds
+    unary minus less tightly than ``**`` and would give ``2 ** -(3**2) == 1/512``; use
+    explicit parens if you want that interpretation. The parse tree makes the precedence
+    decision explicit:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("2 ** -3 ** 2")
+        {'power': [{'literal': 2},
+                   {'power': [{'negate': [{'literal': 3}]}, {'literal': 2}]}]}
 
     A variance/stddev formula — the motivating example from #63:
 
