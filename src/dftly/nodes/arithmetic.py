@@ -264,6 +264,84 @@ class Divide(BinaryOp):
     pl_fn = pl.Expr.truediv
 
 
+class Power(BinaryOp):
+    """This non-terminal node represents exponentiation: ``base ** exponent``.
+
+    Compiles to ``base.polars_expr.pow(exponent.polars_expr)``. Accepts arbitrary expressions
+    on either side — ``$x ** 2``, ``$x ** $y``, ``2 ** $n`` all work.
+
+    In the string-form grammar, ``**`` binds tighter than ``*`` / ``/`` and is right-associative
+    (``2 ** 3 ** 2`` parses as ``2 ** (3 ** 2) = 512``). Unary minus binds tighter on the left,
+    so ``-2 ** 2`` parses as ``(-2) ** 2 = 4`` — this differs from Python (which gives ``-4``)
+    but falls out of the existing grammar without restructuring cast/unary precedence. Use
+    explicit parens (``-(x ** 2)``) if you want the Python interpretation.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(Power(Literal(2), Literal(10)).polars_expr).item()
+        1024
+        >>> pl.select(Power(Literal(9), Literal(0.5)).polars_expr).item()
+        3.0
+
+    String form via the grammar:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"x": [2, 3, 4]})
+        >>> df.select(squared=Parser.expr_to_polars("$x ** 2"))["squared"].to_list()
+        [4, 9, 16]
+
+    Precedence: ``**`` binds tighter than ``*`` and ``/``:
+
+        >>> pl.select(Parser.expr_to_polars("2 * 3 ** 2")).item()
+        18
+        >>> pl.select(Parser.expr_to_polars("2 ** 3 * 2")).item()
+        16
+
+    Right-associative (``2 ** 3 ** 2 == 2 ** 9``, not ``8 ** 2``):
+
+        >>> pl.select(Parser.expr_to_polars("2 ** 3 ** 2")).item()
+        512
+
+    Unary minus binds tighter than ``**``, attaching to the adjacent literal rather than
+    the whole power. This applies wherever unary minus appears, including inside chained
+    exponents:
+
+        >>> pl.select(Parser.expr_to_polars("-2 ** 2")).item()
+        4
+        >>> pl.select(Parser.expr_to_polars("-(2 ** 2)")).item()
+        -4
+        >>> pl.select(Parser.expr_to_polars("2.0 ** -3 ** 2")).item()
+        512.0
+        >>> pl.select(Parser.expr_to_polars("2.0 ** -(3 ** 2)")).item()
+        0.001953125
+
+    Right-associativity of ``**`` itself is preserved — ``2 ** 3 ** 2`` is ``2 ** (3 ** 2)
+    == 512``. In ``2 ** -3 ** 2``, ``-3`` is consumed by unary minus before ``**``
+    associates, so it parses as ``2 ** ((-3) ** 2) == 2 ** 9 == 512``. Python's rule binds
+    unary minus less tightly than ``**`` and would give ``2 ** -(3**2) == 1/512``; use
+    explicit parens if you want that interpretation. The parse tree makes the precedence
+    decision explicit:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("2 ** -3 ** 2")
+        {'power': [{'literal': 2},
+                   {'power': [{'negate': [{'literal': 3}]}, {'literal': 2}]}]}
+
+    A variance/stddev formula — the motivating example from #63:
+
+        >>> df = pl.DataFrame({"sum": [10.0, 20.0], "sum_sqd": [30.0, 110.0], "n": [4, 4]})
+        >>> stddev = Parser.expr_to_polars(
+        ...     "($sum_sqd / $n - ($sum / $n) ** 2) ** 0.5"
+        ... )
+        >>> df.select(stddev=stddev)["stddev"].to_list()
+        [1.118033988749895, 1.5811388300841898]
+    """
+
+    KEY = "power"
+    SYM = "**"
+    pl_fn = pl.Expr.pow
+
+
 class Mean(ArgsOnlyFn):
     """This non-terminal node represents the mean of multiple expressions.
 
