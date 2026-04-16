@@ -2,7 +2,7 @@
 
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 import polars as pl
@@ -17,6 +17,7 @@ def __setup_doctest_namespace(
     doctest_namespace.update(
         {
             "datetime": datetime,
+            "timedelta": timedelta,
             "tempfile": tempfile,
             "os": os,
             "pl": pl,
