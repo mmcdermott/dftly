@@ -12,6 +12,7 @@ from lark.visitors import Discard
 from ..nodes import (
     BINARY_OPS,
     UNARY_OPS,
+    DT_CAST_ACCESSORS,
     NODES,
     Cast,
     Literal,
@@ -292,4 +293,7 @@ class DftlyGrammar(Transformer):
 
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
+        name = str(output_type)
+        if name in DT_CAST_ACCESSORS:
+            return DT_CAST_ACCESSORS[name].from_lark([input])
         return Cast.from_lark([input, Literal.from_lark(output_type)])

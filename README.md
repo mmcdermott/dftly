@@ -1,6 +1,6 @@
 # DataFrame Transformation Language from YAML (dftly)
 
-[![Python 3.12+](https://img.shields.io/badge/-Python_3.12+-blue?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3100/)
+[![Python 3.11+](https://img.shields.io/badge/-Python_3.11+-blue?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3110/)
 [![PyPI - Version](https://img.shields.io/pypi/v/dftly)](https://pypi.org/project/dftly/)
 [![Documentation Status](https://readthedocs.org/projects/dftly/badge/?version=latest)](https://dftly.readthedocs.io/en/latest/?badge=latest)
 [![Tests](https://github.com/mmcdermott/dftly/actions/workflows/tests.yaml/badge.svg)](https://github.com/mmcdermott/dftly/actions/workflows/tests.yaml)
@@ -113,6 +113,94 @@ shape: (2, 3)
 └────────────┴────────────┴─────────────────────┘
 
 ```
+
+Dftly also supports exponentiation with the familiar `**` operator, which binds tighter than
+`*`/`/` and is right-associative:
+
+```python
+>>> ops = r"""
+... squared: "$col1 ** 2"
+... cubed: "$col2 ** 3"
+... hypotenuse: "($col1**2 + $col2**2) ** 0.5"
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 3)
+┌─────────┬───────┬────────────┐
+│ squared ┆ cubed ┆ hypotenuse │
+│ ---     ┆ ---   ┆ ---        │
+│ i64     ┆ i64   ┆ f64        │
+╞═════════╪═══════╪════════════╡
+│ 1       ┆ 27    ┆ 3.162278   │
+│ 4       ┆ 64    ┆ 4.472136   │
+└─────────┴───────┴────────────┘
+
+```
+
+Datetime values expose their components via cast syntax — every `<field>_of_<period>` name
+(e.g. `hour_of_day`, `day_of_week`, `month_of_year`, `year_of_date`) works in both `::` and
+`as` forms and compiles to the corresponding polars `.dt.*` method:
+
+```python
+>>> ops = r"""
+... event: '$col3::"%Y-%m-%d"'
+... year: '$col3::"%Y-%m-%d" as year_of_date'
+... month: '$col3::"%Y-%m-%d" as month_of_year'
+... day_of_week: '$col3::"%Y-%m-%d" as day_of_week'
+... quarter: '$col3::"%Y-%m-%d" as quarter_of_year'
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 5)
+┌────────────┬──────┬───────┬─────────────┬─────────┐
+│ event      ┆ year ┆ month ┆ day_of_week ┆ quarter │
+│ ---        ┆ ---  ┆ ---   ┆ ---         ┆ ---     │
+│ date       ┆ i32  ┆ i8    ┆ i8          ┆ i8      │
+╞════════════╪══════╪═══════╪═════════════╪═════════╡
+│ 2020-01-01 ┆ 2020 ┆ 1     ┆ 3           ┆ 1       │
+│ 2021-06-15 ┆ 2021 ┆ 6     ┆ 2           ┆ 2       │
+└────────────┴──────┴───────┴─────────────┴─────────┘
+
+```
+
+Note that `::year` is already the integer→date constructor (`2024::year` → `date(2024, 1, 1)`),
+so the year-extraction accessor is spelled `::year_of_date` to keep the direction unambiguous.
+Every other component name (`month_of_year`, `day_of_month`, etc.) follows the same pattern.
+
+Duration values project to numeric totals via `total_<unit>` cast names (`total_seconds`,
+`total_minutes`, `total_hours`, `total_days`, `total_milliseconds`, `total_microseconds`,
+`total_nanoseconds`). This is the dual to the existing `::days` / `::seconds` construction —
+numeric to Duration goes through plural unit names, Duration to numeric goes through
+`total_`-prefixed ones. Combined with datetime subtraction, this covers most time-derived
+feature engineering in one line:
+
+```python
+>>> ops = r"""
+... days_since_start: '(($col3 as "%Y-%m-%d") - 2020-01-01) as total_days'
+... hours_since_start: '(($col3 as "%Y-%m-%d") - 2020-01-01) as total_hours'
+... age_years: '(2030-01-01 - ($col3 as "%Y-%m-%d"))::total_microseconds / 31557600000000'
+... """
+>>> df.select(**Parser.to_polars(ops))
+shape: (2, 3)
+┌──────────────────┬───────────────────┬───────────┐
+│ days_since_start ┆ hours_since_start ┆ age_years │
+│ ---              ┆ ---               ┆ ---       │
+│ i64              ┆ i64               ┆ f64       │
+╞══════════════════╪═══════════════════╪═══════════╡
+│ 0                ┆ 0                 ┆ 10.001369 │
+│ 531              ┆ 12744             ┆ 8.54757   │
+└──────────────────┴───────────────────┴───────────┘
+
+```
+
+Note the use of `::total_microseconds` rather than `as total_microseconds` in the `age_years`
+line — the two cast forms are semantically equivalent but differ in grammar precedence.
+`::` binds tighter than `*`/`/`, so the division applies to the result of the accessor;
+`as` binds loosely and would capture the remainder of the expression, causing a parse
+error in this case. Use `::` inside larger expressions, `as` when the cast is the
+outermost operation.
+
+Every datetime/duration accessor also exists as a function-call form — `dt_hour_of_day($event)`,
+`dt_total_seconds($delta)`, etc. — for use in programmatic construction or when the cast
+form doesn't compose cleanly. The two are always equivalent.
 
 You can also add literal columns:
 
