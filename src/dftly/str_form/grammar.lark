@@ -11,7 +11,8 @@
 //   8. exp_expr       — `**` (right-associative)
 //   9. local_cast     — `::type` / `::'%fmt'`
 //  10. unary          — `not`, `!`, unary `+`/`-`
-//  11. primary        — literals, columns, function calls, regex, parenthesized expressions
+//  11. postfix        — `[start:stop]` substring shorthand (binds tighter than unary)
+//  12. primary        — literals, columns, function calls, regex, parenthesized expressions
 //
 // Priority annotations (e.g. `.1`, `.2`) on terminals resolve lexer ambiguities:
 // higher priority terminals are preferred when multiple patterns match the same input.
@@ -52,6 +53,9 @@ AND_SYM: "&&"
 OR_SYM: "||"
 NOT_SYM: "!"
 QUESTION: "?"
+LBRACK: "["
+RBRACK: "]"
+COLON: ":"
 
 // Keywords — priority .2 ensures these are preferred over NAME
 FORMAT_PFX: "f"
@@ -80,7 +84,7 @@ FROM.2: /from/i
 ?global_cast: conditional AS NAME   -> cast_expr
             | conditional AS STRING -> strptime
             | conditional AS QUESTION STRING -> strptime_nonstrict
-            | conditional AT TIME   -> binary_expr
+            | conditional AT time_literal   -> binary_expr
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional
@@ -121,7 +125,30 @@ FROM.2: /from/i
 
 ?unary: (NOT_SYM|NOT) unary   -> unary_expr
       | (PLUS|MINUS) unary    -> unary_expr
-      | primary
+      | postfix
+
+// Substring shorthand: `primary[start:stop]`. Binds tighter than unary so that
+// `-$a[0:3]` parses as `-($a[0:3])`, matching Python's subscription precedence.
+// Chained subscripts (`$a[0:5][1:3]`) are supported via the left-recursive rule.
+// The four `slice_spec` alternatives correspond to Python's four slice forms:
+//   `[i:j]`, `[i:]`, `[:j]`, `[:]`. Single-index `[i]` and step `[i:j:k]` are
+//   intentionally NOT supported — single-index means `substring(expr, i, i+1)`
+//   which is trivial to write as `substring(expr, i, i+1)`, and polars has no
+//   `str.slice` step. Both produce a parse error pointing at the unsupported form.
+// The `TIME`-shaped slice case (`[10:30]`) needs the extra alternative below
+// because lark's longest-match lexer prefers the 5-char TIME match over the
+// 2-char INT, so `10:30` never reaches the `expr COLON expr` alternative. TIME
+// is parsed at the rule level (see `time_literal` and LITERAL_PARSERS comment in
+// parser.py) so the raw Token flows into `substring_slice_time`, which splits
+// on `:` — 2 parts is a valid `HH:MM` slice, 3 parts is an unsupported step.
+?postfix: postfix LBRACK slice_spec RBRACK  -> substring_postfix
+        | primary
+
+?slice_spec: expr COLON expr   -> substring_slice_full
+           | expr COLON        -> substring_slice_from
+           | COLON expr        -> substring_slice_to
+           | COLON             -> substring_slice_all
+           | TIME              -> substring_slice_time
 
 ?paren_group: "(" expr ")"
 
@@ -135,7 +162,7 @@ FROM.2: /from/i
         | call_expr
         | (DOLLAR)NAME -> column
         | (FORMAT_PFX)STRING -> string_interpolate
-        | TIME
+        | time_literal
         | DATE
         | DATETIME
         | NUMBER
@@ -143,3 +170,11 @@ FROM.2: /from/i
         | STRING
         | NAME -> bare_word
         | paren_group
+
+// TIME is parsed at rule level rather than via a terminal-level transformer so that
+// the raw `TIME` Token remains accessible in contexts where we need to distinguish
+// `HH:MM` (a valid 2-bound substring slice) from `HH:MM:SS` (an unambiguous step
+// request, not supported). The rule-level `time_literal` handler converts the token
+// into a Literal dict for every context that wants a parsed value; the slice-spec
+// handler operates on the raw token directly.
+time_literal: TIME  -> time_literal
