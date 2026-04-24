@@ -135,10 +135,12 @@ FROM.2: /from/i
 //   intentionally NOT supported — single-index means `substring(expr, i, i+1)`
 //   which is trivial to write as `substring(expr, i, i+1)`, and polars has no
 //   `str.slice` step. Both produce a parse error pointing at the unsupported form.
-// The `TIME`-shaped slice case (`[10:30]`) is handled by the `substring_slice_time`
-// rule below: lark's longest-match lexer prefers the 5-char TIME match over the
-// 2-char INT, so we decompose the TIME back into (HH, MM) bounds in the transformer.
-// `HH:MM:SS`-shaped tokens raise a clear "step not supported" error.
+// The `TIME`-shaped slice case (`[10:30]`) needs the extra alternative below
+// because lark's longest-match lexer prefers the 5-char TIME match over the
+// 2-char INT, so `10:30` never reaches the `expr COLON expr` alternative. TIME
+// is parsed at the rule level (see `time_literal` and LITERAL_PARSERS comment in
+// parser.py) so the raw Token flows into `substring_slice_time`, which splits
+// on `:` — 2 parts is a valid `HH:MM` slice, 3 parts is an unsupported step.
 ?postfix: postfix LBRACK slice_spec RBRACK  -> substring_postfix
         | primary
 

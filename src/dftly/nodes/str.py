@@ -654,7 +654,8 @@ class Substring(KwargsOnlyFn):
         >>> pl.select(empty.polars_expr).item()
         ''
 
-    Negative indices count from the end of the string:
+    Negative indices count from the end of the string, matching Python's slice
+    semantics even for mixed-sign and out-of-range bounds:
 
         >>> tail = Substring(source=Literal("abcdef"), start=Literal(-2))
         >>> pl.select(tail.polars_expr).item()
@@ -662,6 +663,18 @@ class Substring(KwargsOnlyFn):
         >>> middle = Substring(source=Literal("abcdef"), start=Literal(-4), stop=Literal(-1))
         >>> pl.select(middle.polars_expr).item()
         'cde'
+        >>> mixed_neg_pos = Substring(source=Literal("abcdef"), start=Literal(-4), stop=Literal(2))
+        >>> pl.select(mixed_neg_pos.polars_expr).item()
+        ''
+        >>> mixed_pos_neg = Substring(source=Literal("abcdef"), start=Literal(2), stop=Literal(-1))
+        >>> pl.select(mixed_pos_neg.polars_expr).item()
+        'cde'
+        >>> out_of_range = Substring(source=Literal("abcdef"), start=Literal(-100), stop=Literal(200))
+        >>> pl.select(out_of_range.polars_expr).item()
+        'abcdef'
+        >>> backward = Substring(source=Literal("abcdef"), start=Literal(5), stop=Literal(2))
+        >>> pl.select(backward.polars_expr).item()
+        ''
 
     It parses from string form via the function-call grammar, with 2 or 3 positional args:
 
@@ -774,10 +787,27 @@ class Substring(KwargsOnlyFn):
     def polars_expr(self) -> pl.Expr:
         source_expr = self.kwargs["source"].polars_expr
         start_expr = self.kwargs["start"].polars_expr
-        if "stop" in self.kwargs:
-            length_expr = self.kwargs["stop"].polars_expr - start_expr
-            return source_expr.str.slice(start_expr, length_expr)
-        return source_expr.str.slice(start_expr)
+        if "stop" not in self.kwargs:
+            # Open stop: polars' ``.str.slice(offset)`` matches Python's ``a[i:]``
+            # for both positive and negative offsets with no normalization needed.
+            return source_expr.str.slice(start_expr)
+        stop_expr = self.kwargs["stop"].polars_expr
+        # Python slice semantics: normalize negative bounds against ``len``, clip
+        # both to ``[0, len]``, then take ``length = stop - start``. Polars'
+        # ``.str.slice(offset, length)`` takes a signed offset (negative counts
+        # from end) but a non-negative length starting at that offset, so a naive
+        # ``stop - start`` is wrong for mixed-sign or out-of-range bounds — e.g.
+        # ``"abcdef"[-4:2]`` is ``""`` in Python but would ask polars for offset
+        # ``-4``, length ``6``, returning ``"cdef"``. We normalize first.
+        str_len = source_expr.str.len_chars().cast(pl.Int64)
+        norm_start = (
+            pl.when(start_expr < 0).then(start_expr + str_len).otherwise(start_expr)
+        ).clip(0, str_len)
+        norm_stop = (
+            pl.when(stop_expr < 0).then(stop_expr + str_len).otherwise(stop_expr)
+        ).clip(0, str_len)
+        length = (norm_stop - norm_start).clip(0)
+        return source_expr.str.slice(norm_start, length)
 
     @classmethod
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
