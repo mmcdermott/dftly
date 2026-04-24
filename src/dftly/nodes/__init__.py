@@ -45,7 +45,14 @@ from .datetime import (
     DtTotalHours,
     DtTotalDays,
 )
-from .str import StringInterpolate, RegexExtract, RegexMatch, Strptime
+from .str import (
+    StringInterpolate,
+    RegexExtract,
+    RegexMatch,
+    Strptime,
+    LenChars,
+    Substring,
+)
 from .conditional import Conditional
 from .types import Cast, TYPES
 
@@ -76,6 +83,8 @@ __nodes = [
     StringInterpolate,
     RegexExtract,
     RegexMatch,
+    LenChars,
+    Substring,
     Conditional,
     Cast,
     Strptime,

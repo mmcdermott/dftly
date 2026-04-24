@@ -562,3 +562,170 @@ class Strptime(KwargsOnlyFn):
         source, format = items
 
         return {cls.KEY: {"format": format, "source": source}}
+
+
+class LenChars(ArgsOnlyFn):
+    """This non-terminal node returns the character length of a string expression.
+
+    The result is a ``UInt32`` count of Unicode characters (not bytes). Name matches Polars'
+    ``pl.Expr.str.len_chars()``. This node is function-only (no operator form), so it subclasses
+    :class:`ArgsOnlyFn` with a single-arg check rather than :class:`UnaryOp` (which requires
+    a ``SYM`` for operator-form registration).
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(LenChars(Literal("hello")).polars_expr).item()
+        5
+        >>> pl.select(LenChars(Literal("")).polars_expr).item()
+        0
+        >>> pl.select(LenChars(Literal("café")).polars_expr).item()
+        4
+
+    It parses from string form via the function-call grammar:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"code": ["12345", "1"]})
+        >>> df.select(Parser.expr_to_polars("len_chars($code)"))
+        shape: (2, 1)
+        ┌──────┐
+        │ code │
+        │ ---  │
+        │ u32  │
+        ╞══════╡
+        │ 5    │
+        │ 1    │
+        └──────┘
+
+    Parsing a function call yields a node whose short-form argument is a list containing the
+    inner column node:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("len_chars($code)")
+        {'len_chars': [{'column': 'code'}]}
+
+    Only one argument is accepted:
+
+        >>> LenChars(Literal("a"), Literal("b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: len_chars requires exactly one argument; got 2
+    """
+
+    KEY = "len_chars"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        return self.args[0].polars_expr.str.len_chars()
+
+
+class Substring(KwargsOnlyFn):
+    """This non-terminal node extracts a substring from a string expression.
+
+    Uses Python-style ``[start, stop)`` semantics: inclusive start, exclusive stop. An omitted
+    ``stop`` means "to end of string". Negative indices are honored (they count from the end).
+
+    Arguments:
+        source: the string expression to slice.
+        start: the index at which the substring begins (inclusive).
+        stop: optional index at which the substring ends (exclusive). If omitted, slices to end.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> substr = Substring(source=Literal("abcdef"), start=Literal(1), stop=Literal(4))
+        >>> pl.select(substr.polars_expr).item()
+        'bcd'
+        >>> to_end = Substring(source=Literal("abcdef"), start=Literal(2))
+        >>> pl.select(to_end.polars_expr).item()
+        'cdef'
+        >>> empty = Substring(source=Literal("abc"), start=Literal(0), stop=Literal(0))
+        >>> pl.select(empty.polars_expr).item()
+        ''
+
+    Negative indices count from the end of the string:
+
+        >>> tail = Substring(source=Literal("abcdef"), start=Literal(-2))
+        >>> pl.select(tail.polars_expr).item()
+        'ef'
+        >>> middle = Substring(source=Literal("abcdef"), start=Literal(-4), stop=Literal(-1))
+        >>> pl.select(middle.polars_expr).item()
+        'cde'
+
+    It parses from string form via the function-call grammar, with 2 or 3 positional args:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("substring($code, 0, 3)")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("substring($code, 3)")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 3}}}
+
+    End-to-end: the MIMIC ICD dot-insertion pattern (``add_dot($code, 3)``) combines
+    :class:`LenChars` and :class:`Substring` to produce a declarative equivalent of the
+    Python guard-and-splice idiom:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"code": ["12345", "1"]})
+        >>> expr = Parser.expr_to_polars(
+        ...     'f"{substring($code, 0, 3)}.{substring($code, 3)}" '
+        ...     'if len_chars($code) > 3 else $code'
+        ... )
+        >>> df.select(expr).to_series().to_list()
+        ['123.45', '1']
+
+    Missing required kwargs raise an error:
+
+        >>> Substring(source=Literal("abc"))
+        Traceback (most recent call last):
+            ...
+        ValueError: Missing required keys for substring: {'start'}
+
+    Extra kwargs raise an error:
+
+        >>> Substring(source=Literal("abc"), start=Literal(0), step=Literal(2))
+        Traceback (most recent call last):
+            ...
+        ValueError: Extra unallowed keys for substring: {'step'}
+    """
+
+    KEY = "substring"
+    REQUIRED_KWARGS = {"source", "start"}
+    OPTIONAL_KWARGS = {"stop"}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        source_expr = self.kwargs["source"].polars_expr
+        start_expr = self.kwargs["start"].polars_expr
+        if "stop" in self.kwargs:
+            length_expr = self.kwargs["stop"].polars_expr - start_expr
+            return source_expr.str.slice(start_expr, length_expr)
+        return source_expr.str.slice(start_expr)
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
+        if len(items) == 2:
+            kwargs = {"source": items[0], "start": items[1]}
+        elif len(items) == 3:
+            kwargs = {
+                "source": items[0],
+                "start": items[1],
+                "stop": items[2],
+            }
+        else:
+            raise ValueError(
+                f"substring expects 2 or 3 positional arguments; got {len(items)}"
+            )
+        return {cls.KEY: kwargs}
