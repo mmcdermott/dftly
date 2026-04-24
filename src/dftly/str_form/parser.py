@@ -202,11 +202,13 @@ class DftlyGrammar(Transformer):
 
         return cls().transform(tree)
 
+    # TIME intentionally omitted: parsed at the rule level via ``time_literal`` so the
+    # raw Token remains accessible to the substring slice-spec handler, which needs to
+    # distinguish `HH:MM` (valid 2-bound slice) from `HH:MM:SS` (unsupported step).
     LITERAL_PARSERS = {
         "INT": int,
         "NUMBER": lambda x: float(x) if "." in x or "e" in x.lower() else int(x),
         "BOOL": lambda x: x.lower() == "true",
-        "TIME": lambda x: dt_parser.parse(x).time(),
         "DATE": lambda x: dt_parser.parse(x).date(),
         "DATETIME": dt_parser.parse,
         "STRING": lambda x: x[1:-1],  # Remove surrounding quotes
@@ -322,23 +324,32 @@ class DftlyGrammar(Transformer):
     def substring_slice_all(self, items: list[Any]) -> dict:
         return {"start": Literal.from_lark(0)}
 
+    def time_literal(self, items: list[Any]) -> dict:
+        # TIME terminal is not in ``LITERAL_PARSERS`` so we receive the raw Token;
+        # convert it to a Literal dict here for every non-slice context.
+        (token,) = items
+        try:
+            return Literal.from_lark(dt_parser.parse(str(token)).time())
+        except Exception as e:
+            raise ValueError(f"Failed to parse literal {token}") from e
+
     def substring_slice_time(self, items: list[Any]) -> dict:
         # Lark's longest-match lexer prefers TIME over INT:COLON:INT when both bounds
-        # are 2-digit integers matching `HH:MM` (e.g. `$a[10:30]`). By the time we
-        # get here, the TIME terminal has already been transformed into a literal
-        # `datetime.time`, so we decompose the time object back into integer bounds.
-        # `HH:MM:SS` (step) cannot be distinguished from `HH:MM` when SS==0 (both
-        # parse to `time(h, m, 0)`); we treat that collision as a slice. Non-zero
-        # SS is an unambiguous step request and raises.
-        (time_dict,) = items
-        t = time_dict["literal"]
-        if t.second != 0:
-            raise ValueError(
-                f"Slice shorthand does not support step "
-                f"(got '{t.hour}:{t.minute:02d}:{t.second:02d}'); "
-                f"use the substring() function form."
-            )
-        return {
-            "start": Literal.from_lark(t.hour),
-            "stop": Literal.from_lark(t.minute),
-        }
+        # are 2-digit integers matching `HH:MM` (e.g. `$a[10:30]`). We receive the raw
+        # TIME Token here (no terminal-level transform — see ``LITERAL_PARSERS``) and
+        # split on ``:`` to count components. Two parts → 2-bound slice. Three parts
+        # (``HH:MM:SS``) → step, not supported. An AM/PM suffix is stripped defensively
+        # — it's grammatically permitted by the TIME regex but meaningless in a slice.
+        (token,) = items
+        raw = str(token)
+        parts = raw.split()[0].split(":")
+        if len(parts) == 2:
+            hh, mm = parts
+            return {
+                "start": Literal.from_lark(int(hh)),
+                "stop": Literal.from_lark(int(mm)),
+            }
+        raise ValueError(
+            f"Slice shorthand does not support step (got {raw!r}); "
+            f"use the substring() function form."
+        )

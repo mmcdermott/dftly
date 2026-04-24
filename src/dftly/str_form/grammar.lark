@@ -84,7 +84,7 @@ FROM.2: /from/i
 ?global_cast: conditional AS NAME   -> cast_expr
             | conditional AS STRING -> strptime
             | conditional AS QUESTION STRING -> strptime_nonstrict
-            | conditional AT TIME   -> binary_expr
+            | conditional AT time_literal   -> binary_expr
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional
@@ -160,7 +160,7 @@ FROM.2: /from/i
         | call_expr
         | (DOLLAR)NAME -> column
         | (FORMAT_PFX)STRING -> string_interpolate
-        | TIME
+        | time_literal
         | DATE
         | DATETIME
         | NUMBER
@@ -168,3 +168,11 @@ FROM.2: /from/i
         | STRING
         | NAME -> bare_word
         | paren_group
+
+// TIME is parsed at rule level rather than via a terminal-level transformer so that
+// the raw `TIME` Token remains accessible in contexts where we need to distinguish
+// `HH:MM` (a valid 2-bound substring slice) from `HH:MM:SS` (an unambiguous step
+// request, not supported). The rule-level `time_literal` handler converts the token
+// into a Literal dict for every context that wants a parsed value; the slice-spec
+// handler operates on the raw token directly.
+time_literal: TIME  -> time_literal
