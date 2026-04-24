@@ -202,11 +202,13 @@ class DftlyGrammar(Transformer):
 
         return cls().transform(tree)
 
+    # TIME intentionally omitted: parsed at the rule level via ``time_literal`` so the
+    # raw Token remains accessible to the substring slice-spec handler, which needs to
+    # distinguish `HH:MM` (valid 2-bound slice) from `HH:MM:SS` (unsupported step).
     LITERAL_PARSERS = {
         "INT": int,
         "NUMBER": lambda x: float(x) if "." in x or "e" in x.lower() else int(x),
         "BOOL": lambda x: x.lower() == "true",
-        "TIME": lambda x: dt_parser.parse(x).time(),
         "DATE": lambda x: dt_parser.parse(x).date(),
         "DATETIME": dt_parser.parse,
         "STRING": lambda x: x[1:-1],  # Remove surrounding quotes
@@ -243,6 +245,7 @@ class DftlyGrammar(Transformer):
 
     IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
     FORMAT_PFX = DOLLAR = QUESTION = _discard_token
+    LBRACK = RBRACK = COLON = _discard_token
 
     def NAME(self, val: Token) -> str:
         return str(val)
@@ -297,3 +300,56 @@ class DftlyGrammar(Transformer):
         if name in DT_CAST_ACCESSORS:
             return DT_CAST_ACCESSORS[name].from_lark([input])
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    # Substring shorthand `$col[start:stop]` → Substring(source, start, stop).
+    # The four `substring_slice_*` methods return kwargs dicts without a `source`;
+    # `substring_postfix` fills in `source` from the subscripted expression.
+    def substring_postfix(self, items: list[Any]) -> dict:
+        source, slice_kwargs = items
+        slice_kwargs = {"source": source, **slice_kwargs}
+        return {"substring": slice_kwargs}
+
+    def substring_slice_full(self, items: list[Any]) -> dict:
+        start, stop = items
+        return {"start": start, "stop": stop}
+
+    def substring_slice_from(self, items: list[Any]) -> dict:
+        (start,) = items
+        return {"start": start}
+
+    def substring_slice_to(self, items: list[Any]) -> dict:
+        (stop,) = items
+        return {"start": Literal.from_lark(0), "stop": stop}
+
+    def substring_slice_all(self, items: list[Any]) -> dict:
+        return {"start": Literal.from_lark(0)}
+
+    def time_literal(self, items: list[Any]) -> dict:
+        # TIME terminal is not in ``LITERAL_PARSERS`` so we receive the raw Token;
+        # convert it to a Literal dict here for every non-slice context.
+        (token,) = items
+        try:
+            return Literal.from_lark(dt_parser.parse(str(token)).time())
+        except Exception as e:
+            raise ValueError(f"Failed to parse literal {token}") from e
+
+    def substring_slice_time(self, items: list[Any]) -> dict:
+        # Lark's longest-match lexer prefers TIME over INT:COLON:INT when both bounds
+        # are 2-digit integers matching `HH:MM` (e.g. `$a[10:30]`). We receive the raw
+        # TIME Token here (no terminal-level transform — see ``LITERAL_PARSERS``) and
+        # split on ``:`` to count components. Two parts → 2-bound slice. Three parts
+        # (``HH:MM:SS``) → step, not supported. An AM/PM suffix is stripped defensively
+        # — it's grammatically permitted by the TIME regex but meaningless in a slice.
+        (token,) = items
+        raw = str(token)
+        parts = raw.split()[0].split(":")
+        if len(parts) == 2:
+            hh, mm = parts
+            return {
+                "start": Literal.from_lark(int(hh)),
+                "stop": Literal.from_lark(int(mm)),
+            }
+        raise ValueError(
+            f"Slice shorthand does not support step (got {raw!r}); "
+            f"use the substring() function form."
+        )

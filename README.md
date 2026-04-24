@@ -202,6 +202,46 @@ Every datetime/duration accessor also exists as a function-call form — `dt_hou
 `dt_total_seconds($delta)`, etc. — for use in programmatic construction or when the cast
 form doesn't compose cleanly. The two are always equivalent.
 
+### Position-based string operations
+
+`len_chars($col)` returns the Unicode character count of a string column, and
+`substring($col, start, stop)` returns a slice with Python-style `[start, stop)` semantics
+(inclusive start, exclusive stop; omit `stop` for "to end of string"). Negative indices
+count from the end, and the `$col[start:stop]` postfix shorthand parses to the same AST as
+the function form:
+
+```python
+>>> codes_df = pl.DataFrame({"code": ["12345", "1", "A420"]})
+>>> substring_ops = {
+...     "length": "len_chars($code)",
+...     "first_three": "$code[0:3]",
+...     "trailing": "$code[3:]",
+...     "last_two": "$code[-2:]",
+...     "dotted": 'f"{$code[0:3]}.{$code[3:]}" if len_chars($code) > 3 else $code',
+... }
+>>> codes_df.select(**Parser.to_polars(substring_ops))
+shape: (3, 5)
+┌────────┬─────────────┬──────────┬──────────┬────────┐
+│ length ┆ first_three ┆ trailing ┆ last_two ┆ dotted │
+│ ---    ┆ ---         ┆ ---      ┆ ---      ┆ ---    │
+│ u32    ┆ str         ┆ str      ┆ str      ┆ str    │
+╞════════╪═════════════╪══════════╪══════════╪════════╡
+│ 5      ┆ 123         ┆ 45       ┆ 45       ┆ 123.45 │
+│ 1      ┆ 1           ┆          ┆ 1        ┆ 1      │
+│ 4      ┆ A42         ┆ 0        ┆ 20       ┆ A42.0  │
+└────────┴─────────────┴──────────┴──────────┴────────┘
+
+```
+
+The `dotted` column above is the idiomatic translation of the Python guard-and-splice
+pattern used for ICD-code normalization: apply the dot only when the code is long enough,
+otherwise pass through unchanged. The length guard is what makes `substring` strictly more
+expressive than a pure-regex solution for this pattern.
+
+Slice step (`[i:j:k]`) and single-index subscription (`[i]`) are intentionally unsupported —
+polars' `str.slice` has no step, and single-index is expressible as `substring(expr, i, i+1)`.
+Both produce a clear parse error pointing at the supported forms.
+
 You can also add literal columns:
 
 ```python

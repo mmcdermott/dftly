@@ -562,3 +562,265 @@ class Strptime(KwargsOnlyFn):
         source, format = items
 
         return {cls.KEY: {"format": format, "source": source}}
+
+
+class LenChars(ArgsOnlyFn):
+    """This non-terminal node returns the character length of a string expression.
+
+    The result is a ``UInt32`` count of Unicode characters (not bytes). Name matches Polars'
+    ``pl.Expr.str.len_chars()``. This node is function-only (no operator form), so it subclasses
+    :class:`ArgsOnlyFn` with a single-arg check rather than :class:`UnaryOp` (which requires
+    a ``SYM`` for operator-form registration).
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> pl.select(LenChars(Literal("hello")).polars_expr).item()
+        5
+        >>> pl.select(LenChars(Literal("")).polars_expr).item()
+        0
+        >>> pl.select(LenChars(Literal("café")).polars_expr).item()
+        4
+
+    It parses from string form via the function-call grammar:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"code": ["12345", "1"]})
+        >>> df.select(Parser.expr_to_polars("len_chars($code)"))
+        shape: (2, 1)
+        ┌──────┐
+        │ code │
+        │ ---  │
+        │ u32  │
+        ╞══════╡
+        │ 5    │
+        │ 1    │
+        └──────┘
+
+    Parsing a function call yields a node whose short-form argument is a list containing the
+    inner column node:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("len_chars($code)")
+        {'len_chars': [{'column': 'code'}]}
+
+    Only one argument is accepted:
+
+        >>> LenChars(Literal("a"), Literal("b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: len_chars requires exactly one argument; got 2
+    """
+
+    KEY = "len_chars"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        return self.args[0].polars_expr.str.len_chars()
+
+
+class Substring(KwargsOnlyFn):
+    """This non-terminal node extracts a substring from a string expression.
+
+    Uses Python-style ``[start, stop)`` semantics: inclusive start, exclusive stop. An omitted
+    ``stop`` means "to end of string". Negative indices are honored (they count from the end).
+
+    Arguments:
+        source: the string expression to slice.
+        start: the index at which the substring begins (inclusive).
+        stop: optional index at which the substring ends (exclusive). If omitted, slices to end.
+
+    Example:
+        >>> from dftly.nodes import Literal
+        >>> substr = Substring(source=Literal("abcdef"), start=Literal(1), stop=Literal(4))
+        >>> pl.select(substr.polars_expr).item()
+        'bcd'
+        >>> to_end = Substring(source=Literal("abcdef"), start=Literal(2))
+        >>> pl.select(to_end.polars_expr).item()
+        'cdef'
+        >>> empty = Substring(source=Literal("abc"), start=Literal(0), stop=Literal(0))
+        >>> pl.select(empty.polars_expr).item()
+        ''
+
+    Negative indices count from the end of the string, matching Python's slice
+    semantics even for mixed-sign and out-of-range bounds:
+
+        >>> tail = Substring(source=Literal("abcdef"), start=Literal(-2))
+        >>> pl.select(tail.polars_expr).item()
+        'ef'
+        >>> middle = Substring(source=Literal("abcdef"), start=Literal(-4), stop=Literal(-1))
+        >>> pl.select(middle.polars_expr).item()
+        'cde'
+        >>> mixed_neg_pos = Substring(source=Literal("abcdef"), start=Literal(-4), stop=Literal(2))
+        >>> pl.select(mixed_neg_pos.polars_expr).item()
+        ''
+        >>> mixed_pos_neg = Substring(source=Literal("abcdef"), start=Literal(2), stop=Literal(-1))
+        >>> pl.select(mixed_pos_neg.polars_expr).item()
+        'cde'
+        >>> out_of_range = Substring(source=Literal("abcdef"), start=Literal(-100), stop=Literal(200))
+        >>> pl.select(out_of_range.polars_expr).item()
+        'abcdef'
+        >>> backward = Substring(source=Literal("abcdef"), start=Literal(5), stop=Literal(2))
+        >>> pl.select(backward.polars_expr).item()
+        ''
+
+    It parses from string form via the function-call grammar, with 2 or 3 positional args:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("substring($code, 0, 3)")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("substring($code, 3)")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 3}}}
+
+    Python-style ``[start:stop]`` postfix shorthand produces the same AST as the function
+    form. All four Python slice shapes are supported; omitted endpoints default to 0 for
+    ``start`` and "to end of string" for ``stop``:
+
+        >>> DftlyGrammar.parse_str("$code[0:3]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[3:]")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[:3]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[:]")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 0}}}
+
+    Negative indices and expression-valued bounds work identically to the functional form:
+
+        >>> DftlyGrammar.parse_str("$code[-3:-1]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'negate': [{'literal': 3}]},
+                       'stop': {'negate': [{'literal': 1}]}}}
+
+    The shorthand binds tighter than unary, so ``-$col[0:3]`` is ``-($col[0:3])`` (matching
+    Python). Chained subscripts apply left-to-right: ``$col[0:5][1:3]`` substrings the
+    substring.
+
+        >>> DftlyGrammar.parse_str("$code[0:5][1:3]")
+        {'substring': {'source': {'substring': {'source': {'column': 'code'},
+                                                'start': {'literal': 0},
+                                                'stop': {'literal': 5}}},
+                       'start': {'literal': 1},
+                       'stop': {'literal': 3}}}
+
+    The shorthand also applies to arbitrary parenthesized expressions, not just columns:
+
+        >>> DftlyGrammar.parse_str("($a + $b)[0:3]")
+        {'substring': {'source': {'add': [{'column': 'a'}, {'column': 'b'}]},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+
+    Bounds that form a ``HH:MM`` pattern (e.g. ``[10:30]``) would otherwise be lexed as
+    a TIME literal by Lark's longest-match lexer; they're decomposed back into integer
+    bounds so the intuitive meaning holds:
+
+        >>> DftlyGrammar.parse_str("$code[10:30]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 10},
+                       'stop': {'literal': 30}}}
+
+    Slice step is not supported (Polars' ``str.slice`` has no step); ``HH:MM:SS``-shaped
+    bounds with non-zero seconds raise a clear error pointing at the functional form:
+
+        >>> DftlyGrammar.parse_str("$code[10:30:45]")
+        Traceback (most recent call last):
+            ...
+        lark.exceptions.VisitError: ... Slice shorthand does not support step ...
+
+    End-to-end: the MIMIC ICD dot-insertion pattern (``add_dot($code, 3)``) combines
+    :class:`LenChars` and :class:`Substring` to produce a declarative equivalent of the
+    Python guard-and-splice idiom. Both the function and shorthand forms produce the same
+    result:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"code": ["12345", "1", "A420"]})
+        >>> func_expr = Parser.expr_to_polars(
+        ...     'f"{substring($code, 0, 3)}.{substring($code, 3)}" '
+        ...     'if len_chars($code) > 3 else $code'
+        ... )
+        >>> df.select(func_expr).to_series().to_list()
+        ['123.45', '1', 'A42.0']
+        >>> short_expr = Parser.expr_to_polars(
+        ...     'f"{$code[0:3]}.{$code[3:]}" if len_chars($code) > 3 else $code'
+        ... )
+        >>> df.select(short_expr).to_series().to_list()
+        ['123.45', '1', 'A42.0']
+
+    Missing required kwargs raise an error:
+
+        >>> Substring(source=Literal("abc"))
+        Traceback (most recent call last):
+            ...
+        ValueError: Missing required keys for substring: {'start'}
+
+    Extra kwargs raise an error:
+
+        >>> Substring(source=Literal("abc"), start=Literal(0), step=Literal(2))
+        Traceback (most recent call last):
+            ...
+        ValueError: Extra unallowed keys for substring: {'step'}
+    """
+
+    KEY = "substring"
+    REQUIRED_KWARGS = {"source", "start"}
+    OPTIONAL_KWARGS = {"stop"}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        source_expr = self.kwargs["source"].polars_expr
+        start_expr = self.kwargs["start"].polars_expr
+        if "stop" not in self.kwargs:
+            # Open stop: polars' ``.str.slice(offset)`` matches Python's ``a[i:]``
+            # for both positive and negative offsets with no normalization needed.
+            return source_expr.str.slice(start_expr)
+        stop_expr = self.kwargs["stop"].polars_expr
+        # Python slice semantics: normalize negative bounds against ``len``, clip
+        # both to ``[0, len]``, then take ``length = stop - start``. Polars'
+        # ``.str.slice(offset, length)`` takes a signed offset (negative counts
+        # from end) but a non-negative length starting at that offset, so a naive
+        # ``stop - start`` is wrong for mixed-sign or out-of-range bounds — e.g.
+        # ``"abcdef"[-4:2]`` is ``""`` in Python but would ask polars for offset
+        # ``-4``, length ``6``, returning ``"cdef"``. We normalize first.
+        str_len = source_expr.str.len_chars().cast(pl.Int64)
+        norm_start = (
+            pl.when(start_expr < 0).then(start_expr + str_len).otherwise(start_expr)
+        ).clip(0, str_len)
+        norm_stop = (
+            pl.when(stop_expr < 0).then(stop_expr + str_len).otherwise(stop_expr)
+        ).clip(0, str_len)
+        length = (norm_stop - norm_start).clip(0)
+        return source_expr.str.slice(norm_start, length)
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
+        if len(items) == 2:
+            kwargs = {"source": items[0], "start": items[1]}
+        elif len(items) == 3:
+            kwargs = {
+                "source": items[0],
+                "start": items[1],
+                "stop": items[2],
+            }
+        else:
+            raise ValueError(
+                f"substring expects 2 or 3 positional arguments; got {len(items)}"
+            )
+        return {cls.KEY: kwargs}
