@@ -243,6 +243,7 @@ class DftlyGrammar(Transformer):
 
     IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
     FORMAT_PFX = DOLLAR = QUESTION = _discard_token
+    LBRACK = RBRACK = COLON = _discard_token
 
     def NAME(self, val: Token) -> str:
         return str(val)
@@ -297,3 +298,47 @@ class DftlyGrammar(Transformer):
         if name in DT_CAST_ACCESSORS:
             return DT_CAST_ACCESSORS[name].from_lark([input])
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    # Substring shorthand `$col[start:stop]` → Substring(source, start, stop).
+    # The four `substring_slice_*` methods return kwargs dicts without a `source`;
+    # `substring_postfix` fills in `source` from the subscripted expression.
+    def substring_postfix(self, items: list[Any]) -> dict:
+        source, slice_kwargs = items
+        slice_kwargs = {"source": source, **slice_kwargs}
+        return {"substring": slice_kwargs}
+
+    def substring_slice_full(self, items: list[Any]) -> dict:
+        start, stop = items
+        return {"start": start, "stop": stop}
+
+    def substring_slice_from(self, items: list[Any]) -> dict:
+        (start,) = items
+        return {"start": start}
+
+    def substring_slice_to(self, items: list[Any]) -> dict:
+        (stop,) = items
+        return {"start": Literal.from_lark(0), "stop": stop}
+
+    def substring_slice_all(self, items: list[Any]) -> dict:
+        return {"start": Literal.from_lark(0)}
+
+    def substring_slice_time(self, items: list[Any]) -> dict:
+        # Lark's longest-match lexer prefers TIME over INT:COLON:INT when both bounds
+        # are 2-digit integers matching `HH:MM` (e.g. `$a[10:30]`). By the time we
+        # get here, the TIME terminal has already been transformed into a literal
+        # `datetime.time`, so we decompose the time object back into integer bounds.
+        # `HH:MM:SS` (step) cannot be distinguished from `HH:MM` when SS==0 (both
+        # parse to `time(h, m, 0)`); we treat that collision as a slice. Non-zero
+        # SS is an unambiguous step request and raises.
+        (time_dict,) = items
+        t = time_dict["literal"]
+        if t.second != 0:
+            raise ValueError(
+                f"Slice shorthand does not support step "
+                f"(got '{t.hour}:{t.minute:02d}:{t.second:02d}'); "
+                f"use the substring() function form."
+            )
+        return {
+            "start": Literal.from_lark(t.hour),
+            "stop": Literal.from_lark(t.minute),
+        }

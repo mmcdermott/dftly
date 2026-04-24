@@ -673,18 +673,83 @@ class Substring(KwargsOnlyFn):
         >>> DftlyGrammar.parse_str("substring($code, 3)")
         {'substring': {'source': {'column': 'code'}, 'start': {'literal': 3}}}
 
+    Python-style ``[start:stop]`` postfix shorthand produces the same AST as the function
+    form. All four Python slice shapes are supported; omitted endpoints default to 0 for
+    ``start`` and "to end of string" for ``stop``:
+
+        >>> DftlyGrammar.parse_str("$code[0:3]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[3:]")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[:3]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+        >>> DftlyGrammar.parse_str("$code[:]")
+        {'substring': {'source': {'column': 'code'}, 'start': {'literal': 0}}}
+
+    Negative indices and expression-valued bounds work identically to the functional form:
+
+        >>> DftlyGrammar.parse_str("$code[-3:-1]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'negate': [{'literal': 3}]},
+                       'stop': {'negate': [{'literal': 1}]}}}
+
+    The shorthand binds tighter than unary, so ``-$col[0:3]`` is ``-($col[0:3])`` (matching
+    Python). Chained subscripts apply left-to-right: ``$col[0:5][1:3]`` substrings the
+    substring.
+
+        >>> DftlyGrammar.parse_str("$code[0:5][1:3]")
+        {'substring': {'source': {'substring': {'source': {'column': 'code'},
+                                                'start': {'literal': 0},
+                                                'stop': {'literal': 5}}},
+                       'start': {'literal': 1},
+                       'stop': {'literal': 3}}}
+
+    The shorthand also applies to arbitrary parenthesized expressions, not just columns:
+
+        >>> DftlyGrammar.parse_str("($a + $b)[0:3]")
+        {'substring': {'source': {'add': [{'column': 'a'}, {'column': 'b'}]},
+                       'start': {'literal': 0},
+                       'stop': {'literal': 3}}}
+
+    Bounds that form a ``HH:MM`` pattern (e.g. ``[10:30]``) would otherwise be lexed as
+    a TIME literal by Lark's longest-match lexer; they're decomposed back into integer
+    bounds so the intuitive meaning holds:
+
+        >>> DftlyGrammar.parse_str("$code[10:30]")
+        {'substring': {'source': {'column': 'code'},
+                       'start': {'literal': 10},
+                       'stop': {'literal': 30}}}
+
+    Slice step is not supported (Polars' ``str.slice`` has no step); ``HH:MM:SS``-shaped
+    bounds with non-zero seconds raise a clear error pointing at the functional form:
+
+        >>> DftlyGrammar.parse_str("$code[10:30:45]")
+        Traceback (most recent call last):
+            ...
+        lark.exceptions.VisitError: ... Slice shorthand does not support step ...
+
     End-to-end: the MIMIC ICD dot-insertion pattern (``add_dot($code, 3)``) combines
     :class:`LenChars` and :class:`Substring` to produce a declarative equivalent of the
-    Python guard-and-splice idiom:
+    Python guard-and-splice idiom. Both the function and shorthand forms produce the same
+    result:
 
         >>> from dftly import Parser
-        >>> df = pl.DataFrame({"code": ["12345", "1"]})
-        >>> expr = Parser.expr_to_polars(
+        >>> df = pl.DataFrame({"code": ["12345", "1", "A420"]})
+        >>> func_expr = Parser.expr_to_polars(
         ...     'f"{substring($code, 0, 3)}.{substring($code, 3)}" '
         ...     'if len_chars($code) > 3 else $code'
         ... )
-        >>> df.select(expr).to_series().to_list()
-        ['123.45', '1']
+        >>> df.select(func_expr).to_series().to_list()
+        ['123.45', '1', 'A42.0']
+        >>> short_expr = Parser.expr_to_polars(
+        ...     'f"{$code[0:3]}.{$code[3:]}" if len_chars($code) > 3 else $code'
+        ... )
+        >>> df.select(short_expr).to_series().to_list()
+        ['123.45', '1', 'A42.0']
 
     Missing required kwargs raise an error:
 

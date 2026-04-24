@@ -11,7 +11,8 @@
 //   8. exp_expr       — `**` (right-associative)
 //   9. local_cast     — `::type` / `::'%fmt'`
 //  10. unary          — `not`, `!`, unary `+`/`-`
-//  11. primary        — literals, columns, function calls, regex, parenthesized expressions
+//  11. postfix        — `[start:stop]` substring shorthand (binds tighter than unary)
+//  12. primary        — literals, columns, function calls, regex, parenthesized expressions
 //
 // Priority annotations (e.g. `.1`, `.2`) on terminals resolve lexer ambiguities:
 // higher priority terminals are preferred when multiple patterns match the same input.
@@ -52,6 +53,9 @@ AND_SYM: "&&"
 OR_SYM: "||"
 NOT_SYM: "!"
 QUESTION: "?"
+LBRACK: "["
+RBRACK: "]"
+COLON: ":"
 
 // Keywords — priority .2 ensures these are preferred over NAME
 FORMAT_PFX: "f"
@@ -121,7 +125,28 @@ FROM.2: /from/i
 
 ?unary: (NOT_SYM|NOT) unary   -> unary_expr
       | (PLUS|MINUS) unary    -> unary_expr
-      | primary
+      | postfix
+
+// Substring shorthand: `primary[start:stop]`. Binds tighter than unary so that
+// `-$a[0:3]` parses as `-($a[0:3])`, matching Python's subscription precedence.
+// Chained subscripts (`$a[0:5][1:3]`) are supported via the left-recursive rule.
+// The four `slice_spec` alternatives correspond to Python's four slice forms:
+//   `[i:j]`, `[i:]`, `[:j]`, `[:]`. Single-index `[i]` and step `[i:j:k]` are
+//   intentionally NOT supported — single-index means `substring(expr, i, i+1)`
+//   which is trivial to write as `substring(expr, i, i+1)`, and polars has no
+//   `str.slice` step. Both produce a parse error pointing at the unsupported form.
+// The `TIME`-shaped slice case (`[10:30]`) is handled by the `substring_slice_time`
+// rule below: lark's longest-match lexer prefers the 5-char TIME match over the
+// 2-char INT, so we decompose the TIME back into (HH, MM) bounds in the transformer.
+// `HH:MM:SS`-shaped tokens raise a clear "step not supported" error.
+?postfix: postfix LBRACK slice_spec RBRACK  -> substring_postfix
+        | primary
+
+?slice_spec: expr COLON expr   -> substring_slice_full
+           | expr COLON        -> substring_slice_from
+           | COLON expr        -> substring_slice_to
+           | COLON             -> substring_slice_all
+           | TIME              -> substring_slice_time
 
 ?paren_group: "(" expr ")"
 
