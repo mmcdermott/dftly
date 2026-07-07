@@ -75,6 +75,7 @@ EXTRACT.2: /extract/i
 GROUP.2: /group/i
 OF.2: /of/i
 FROM.2: /from/i
+FILL.2: /fill/i
 
 ?start: expr
 
@@ -161,6 +162,13 @@ FROM.2: /from/i
 ?primary: regex
         | call_expr
         | (DOLLAR)NAME -> column
+        // Bulk null-fill: `f"..." fill X` wraps every interpolation field in `coalesce(field, X)`,
+        // so one sentinel applies to the whole f-string. Pure sugar over `string_interpolate` +
+        // `coalesce` (see `string_interpolate_fill` in parser.py) — no new node type. Must precede
+        // the plain interpolation alternative so LALR shifts `FILL` instead of reducing early. The
+        // fill operand is a `primary` (literal, column, bare word, or parenthesized expression),
+        // which keeps it unambiguous; use parens for a compound fill (`fill ($a + $b)`).
+        | (FORMAT_PFX)STRING FILL primary -> string_interpolate_fill
         | (FORMAT_PFX)STRING -> string_interpolate
         | time_literal
         | DATE
