@@ -242,6 +242,39 @@ Slice step (`[i:j:k]`) and single-index subscription (`[i]`) are intentionally u
 polars' `str.slice` has no step, and single-index is expressible as `substring(expr, i, i+1)`.
 Both produce a clear parse error pointing at the supported forms.
 
+### Null-coalescing with `??`
+
+The `??` operator returns its first non-null operand, so it's the concise way to substitute a
+sentinel for nulls. It is pure sugar for the [`coalesce`](#detailed-documentation) node — `$a ?? UNK` parses to exactly the same tree as `coalesce($a, UNK)` — and works anywhere an expression
+is allowed, including inside `f"{...}"` string interpolation (where each field is itself a full
+expression). This makes it easy to guard interpolated columns against nulls:
+
+```python
+>>> null_df = pl.DataFrame({"a": ["x", None], "b": [None, "y"], "n": [None, 5]})
+>>> coalesce_ops = {
+...     "filled": "$a ?? 'UNK'",
+...     "count": "$n ?? 0",
+...     "first_present": "$a ?? $b ?? 'UNK'",
+...     "joined": '''f"{$a ?? 'UNK'}//{$b ?? 'UNK'}"''',
+... }
+>>> null_df.select(**Parser.to_polars(coalesce_ops))
+shape: (2, 4)
+┌────────┬───────┬───────────────┬────────┐
+│ filled ┆ count ┆ first_present ┆ joined │
+│ ---    ┆ ---   ┆ ---           ┆ ---    │
+│ str    ┆ i64   ┆ str           ┆ str    │
+╞════════╪═══════╪═══════════════╪════════╡
+│ x      ┆ 0     ┆ x             ┆ x//UNK │
+│ UNK    ┆ 5     ┆ y             ┆ UNK//y │
+└────────┴───────┴───────────────┴────────┘
+
+```
+
+`??` is left-associative and binds looser than the boolean operators (matching C#/JS), so
+`$x or $y ?? $z` groups as `($x or $y) ?? $z`. Chains like `$a ?? $b ?? UNK` nest as
+`coalesce(coalesce($a, $b), UNK)`, which returns the same first-non-null result as the flat
+`coalesce($a, $b, UNK)`.
+
 You can also add literal columns:
 
 ```python

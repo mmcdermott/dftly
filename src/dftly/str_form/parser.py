@@ -15,6 +15,7 @@ from ..nodes import (
     DT_CAST_ACCESSORS,
     NODES,
     Cast,
+    Coalesce,
     Literal,
 )
 
@@ -244,7 +245,7 @@ class DftlyGrammar(Transformer):
         return Discard
 
     IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
-    FORMAT_PFX = DOLLAR = QUESTION = _discard_token
+    FORMAT_PFX = DOLLAR = QUESTION = COALESCE_OP = _discard_token
     LBRACK = RBRACK = COLON = _discard_token
 
     def NAME(self, val: Token) -> str:
@@ -300,6 +301,14 @@ class DftlyGrammar(Transformer):
         if name in DT_CAST_ACCESSORS:
             return DT_CAST_ACCESSORS[name].from_lark([input])
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    def coalesce_op(self, items: list[Any]) -> dict:
+        # Null-coalescing `left ?? right` is sugar for the existing `coalesce` node. The
+        # ``COALESCE_OP`` token is discarded (see the `_discard_token` assignments above), so
+        # ``items`` is ``[left, right]``. Left-associative chains arrive already nested, e.g.
+        # ``$a ?? $b ?? UNK`` gives ``left = {"coalesce": [$a, $b]}``; we keep that nesting
+        # rather than flattening, matching how `binary_expr` chains `+`/`or`.
+        return Coalesce.from_lark(items)
 
     # Substring shorthand `$col[start:stop]` → Substring(source, start, stop).
     # The four `substring_slice_*` methods return kwargs dicts without a `source`;

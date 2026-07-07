@@ -3,16 +3,17 @@
 // Precedence (lowest to highest):
 //   1. global_cast   — `... as type` / `... as '%fmt'` / `... @ TIME`
 //   2. conditional    — `... if ... else ...`
-//   3. bool_or        — `or`, `||`
-//   4. bool_and       — `and`, `&&`  (AND binds tighter than OR, as in Python/SQL/C)
-//   5. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
-//   6. additive       — `+`, `-`
-//   7. multiplicative — `*`, `/`
-//   8. exp_expr       — `**` (right-associative)
-//   9. local_cast     — `::type` / `::'%fmt'`
-//  10. unary          — `not`, `!`, unary `+`/`-`
-//  11. postfix        — `[start:stop]` substring shorthand (binds tighter than unary)
-//  12. primary        — literals, columns, function calls, regex, parenthesized expressions
+//   3. coalesce_expr  — `??` null-coalescing (desugars to the `coalesce` node)
+//   4. bool_or        — `or`, `||`
+//   5. bool_and       — `and`, `&&`  (AND binds tighter than OR, as in Python/SQL/C)
+//   6. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
+//   7. additive       — `+`, `-`
+//   8. multiplicative — `*`, `/`
+//   9. exp_expr       — `**` (right-associative)
+//  10. local_cast     — `::type` / `::'%fmt'`
+//  11. unary          — `not`, `!`, unary `+`/`-`
+//  12. postfix        — `[start:stop]` substring shorthand (binds tighter than unary)
+//  13. primary        — literals, columns, function calls, regex, parenthesized expressions
 //
 // Priority annotations (e.g. `.1`, `.2`) on terminals resolve lexer ambiguities:
 // higher priority terminals are preferred when multiple patterns match the same input.
@@ -53,6 +54,7 @@ AND_SYM: "&&"
 OR_SYM: "||"
 NOT_SYM: "!"
 QUESTION: "?"
+COALESCE_OP: "??"
 LBRACK: "["
 RBRACK: "]"
 COLON: ":"
@@ -88,7 +90,17 @@ FROM.2: /from/i
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional
-            | bool_or
+            | coalesce_expr
+
+// Null-coalescing `a ?? b` — first non-null operand. Pure sugar: `coalesce_op` rewrites
+// this into the existing `coalesce` node's base form (see AGENTS.md form hierarchy), so
+// `$a ?? UNK` and `coalesce($a, UNK)` produce the same tree. Left-associative, so chains
+// like `$a ?? $b ?? UNK` nest as `coalesce(coalesce($a, $b), UNK)` — semantically identical
+// to `coalesce($a, $b, UNK)`, and consistent with how `+`/`or` chain in this grammar.
+// Placed below `if/else` and above `or`/`and` (matching C#/JS, where `??` binds looser than
+// the boolean operators): `$x or $y ?? $z` parses as `($x or $y) ?? $z`.
+?coalesce_expr: coalesce_expr COALESCE_OP bool_or   -> coalesce_op
+              | bool_or
 
 ?bool_or: bool_or (OR_SYM|OR) bool_and   -> binary_expr
         | bool_and
