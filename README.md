@@ -242,6 +242,40 @@ Slice step (`[i:j:k]`) and single-index subscription (`[i]`) are intentionally u
 polars' `str.slice` has no step, and single-index is expressible as `substring(expr, i, i+1)`.
 Both produce a clear parse error pointing at the supported forms.
 
+### Bulk null-filling in string interpolation
+
+In an `f"..."` interpolation, a single null field nulls the **entire** formatted string — so
+one missing column blanks the whole output. The `fill` suffix guards against this: `f"..." fill X`
+substitutes the sentinel `X` for null in **every** field of that interpolation at once.
+
+It is pure sugar — `f"{$a}//{$b}" fill 'UNK'` is exactly equivalent to wrapping each field in
+[`coalesce`](#detailed-documentation) by hand (`f"{coalesce($a, 'UNK')}//{coalesce($b, 'UNK')}"`),
+and desugars to a plain `string_interpolate` node with no new machinery:
+
+```python
+>>> null_df = pl.DataFrame({"first": ["Ann", None], "last": [None, "Wu"]})
+>>> fill_ops = {
+...     "plain": 'f"{$first} {$last}"',
+...     "filled": '''f"{$first} {$last}" fill '?' ''',
+... }
+>>> null_df.select(**Parser.to_polars(fill_ops))
+shape: (2, 2)
+┌───────┬────────┐
+│ plain ┆ filled │
+│ ---   ┆ ---    │
+│ str   ┆ str    │
+╞═══════╪════════╡
+│ null  ┆ Ann ?  │
+│ null  ┆ ? Wu   │
+└───────┴────────┘
+
+```
+
+The fill operand can be any literal, column, bare word, or parenthesized expression (use parens
+for a compound fill, e.g. `fill ($a + $b)`). For a *per-field* sentinel — different fallbacks for
+different columns — write the `coalesce` explicitly inside each `{...}` instead, since an
+interpolation field is itself a full expression.
+
 You can also add literal columns:
 
 ```python

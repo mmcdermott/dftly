@@ -85,6 +85,36 @@ class StringInterpolate(ArgsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node.
+
+    A null interpolated field nulls the *entire* formatted string, which is rarely what you want.
+    The ``f"..." fill X`` string-form suffix guards against this: it is sugar that wraps every
+    field in ``coalesce(field, X)``, so one sentinel substitutes for nulls across the whole
+    f-string. It desugars to a plain ``string_interpolate`` built from existing nodes — no new
+    node type — and so is exactly equivalent to writing the ``coalesce`` on each field by hand:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str('f"{$a}//{$b}" fill \\'UNK\\'')
+        {'string_interpolate': [{'literal': '{}//{}'},
+                                {'coalesce': ['$a', {'literal': 'UNK'}]},
+                                {'coalesce': ['$b', {'literal': 'UNK'}]}]}
+
+    Without ``fill`` a single null propagates to the whole row; with it, each field falls back to
+    the sentinel:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"a": ["x", None], "b": [None, "y"]})
+        >>> df.select(Parser.expr_to_polars('f"{$a}//{$b}"')).to_series().to_list()
+        [None, None]
+        >>> df.select(Parser.expr_to_polars('f"{$a}//{$b}" fill \\'UNK\\'')).to_series().to_list()
+        ['x//UNK', 'UNK//y']
+
+    The fill operand is any ``primary`` (literal, column, bare word, or a parenthesized
+    expression); use parens for a compound fill. A pattern with no fields to fill is an error:
+
+        >>> DftlyGrammar.parse_str('f"no fields" fill \\'UNK\\'')
+        Traceback (most recent call last):
+            ...
+        lark.exceptions.VisitError: ...`fill` requires an interpolation with at least one field...
     """
 
     KEY = "string_interpolate"

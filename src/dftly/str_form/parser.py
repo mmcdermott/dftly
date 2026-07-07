@@ -15,7 +15,9 @@ from ..nodes import (
     DT_CAST_ACCESSORS,
     NODES,
     Cast,
+    Coalesce,
     Literal,
+    StringInterpolate,
 )
 
 
@@ -244,7 +246,7 @@ class DftlyGrammar(Transformer):
         return Discard
 
     IF = ELSE = EXTRACT = GROUP = OF = FROM = IN = CAST = AS = _discard_token
-    FORMAT_PFX = DOLLAR = QUESTION = _discard_token
+    FORMAT_PFX = DOLLAR = QUESTION = FILL = _discard_token
     LBRACK = RBRACK = COLON = _discard_token
 
     def NAME(self, val: Token) -> str:
@@ -293,6 +295,25 @@ class DftlyGrammar(Transformer):
         result = Strptime.from_lark(items)
         result[Strptime.KEY]["strict"] = Literal.from_lark(False)
         return result
+
+    def string_interpolate_fill(self, items: list[Any]) -> dict:
+        # `f"..." fill X` is sugar for a plain interpolation whose every field is wrapped in
+        # `coalesce(field, X)`, so one sentinel guards the whole f-string against nulls. The
+        # ``FORMAT_PFX`` and ``FILL`` tokens are discarded, so ``items`` is ``[pattern, fill]``.
+        # We reuse ``StringInterpolate.from_lark`` to split the pattern into its normalized
+        # ``"{}"`` form plus the field expressions, then re-wrap each field. The output is a
+        # ``string_interpolate`` base form built only from existing nodes (no new node type),
+        # honoring the form hierarchy in AGENTS.md.
+        pattern, fill = items
+        base = StringInterpolate.from_lark([pattern])[StringInterpolate.KEY]
+        pattern_lit, fields = base[0], base[1:]
+        if not fields:
+            raise ValueError(
+                "`fill` requires an interpolation with at least one field to fill; "
+                f"the pattern has none: {pattern_lit}"
+            )
+        wrapped = [Coalesce.from_lark([field, fill]) for field in fields]
+        return {StringInterpolate.KEY: [pattern_lit] + wrapped}
 
     def cast_expr(self, items: list[Any]) -> dict:
         input, output_type = items
