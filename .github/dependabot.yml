@@ -1,0 +1,27 @@
+# Dependabot keeps GitHub Actions current so deprecations (e.g. the Node 20 runtime
+# sunset that required the checkout/setup-python/artifact major bumps) surface as a PR
+# instead of a silent CI warning.
+#
+# Tuned to be low-noise:
+#   - monthly cadence (not daily/weekly)
+#   - every action update is collapsed into ONE grouped PR per run via `groups`
+#   - scoped to the github-actions ecosystem only
+#
+# To also track Python dependencies later, add a second `updates` entry with
+# `package-ecosystem: "uv"` (grouped the same way) — left out here to keep noise down.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # "/" covers .github/workflows/* and the composite action in .github/actions/.
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      # One PR for all action bumps (majors included) so upgrades land together
+      # and CI validates them as a set rather than trickling in one at a time.
+      github-actions:
+        patterns:
+          - "*"
