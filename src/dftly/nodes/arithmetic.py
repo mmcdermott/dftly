@@ -390,6 +390,36 @@ class Coalesce(ArgsOnlyFn):
         1
         >>> pl.select(Coalesce(Literal(3), Literal(None)).polars_expr).item()
         3
+
+    In string form, the ``??`` null-coalescing operator is sugar for this node: ``$a ?? b``
+    parses to exactly the same base form as the function call ``coalesce($a, b)``. This is the
+    idiomatic way to substitute a sentinel for nulls, including inside f-string interpolation:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("$a ?? 'UNK'")
+        {'coalesce': [{'column': 'a'}, {'literal': 'UNK'}]}
+        >>> DftlyGrammar.parse_str("$a ?? 'UNK'") == DftlyGrammar.parse_str("coalesce($a, 'UNK')")
+        True
+
+    ``??`` is left-associative, so chains nest just like ``+`` or ``or`` — semantically
+    identical to a flat ``coalesce`` since it returns the first non-null operand:
+
+        >>> DftlyGrammar.parse_str("$a ?? $b ?? 'UNK'")
+        {'coalesce': [{'coalesce': [{'column': 'a'}, {'column': 'b'}]}, {'literal': 'UNK'}]}
+
+    It binds looser than the boolean operators (matching C#/JS), so ``$x or $y ?? $z`` groups
+    as ``($x or $y) ?? $z``:
+
+        >>> DftlyGrammar.parse_str("$x or $y ?? $z")
+        {'coalesce': [{'or': [{'column': 'x'}, {'column': 'y'}]}, {'column': 'z'}]}
+
+    End-to-end, per-field sentinels in interpolation fall out for free, because an
+    interpolation field is itself a full sub-expression:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"a": ["x", None], "b": [None, "y"]})
+        >>> df.select(Parser.expr_to_polars('f"{$a ?? \\'UNK\\'}//{$b ?? \\'UNK\\'}"')).to_series().to_list()
+        ['x//UNK', 'UNK//y']
     """
 
     KEY = "coalesce"
