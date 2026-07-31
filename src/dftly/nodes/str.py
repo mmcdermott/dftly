@@ -235,6 +235,46 @@ class RegexExtract(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: The group_index argument must be an integer or a NodeBase instance ...can't be evaluated...
+
+    In string form, ``extract /re/ from ...`` takes its source at the same ``additive`` level the
+    comparison operators use. The source therefore absorbs arithmetic and *local* ``::`` casts, but
+    stops at ``if`` / ``and`` / ``or`` -- so a trailing conditional wraps the extraction rather than
+    being swallowed into the string being extracted from:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> tree = DftlyGrammar.parse_str("extract /(a)(b)/ from $bp if /(a)(b)/ in $bp")
+        >>> list(tree)
+        ['conditional']
+        >>> list(tree["conditional"]["then"])
+        ['regex_extract']
+
+    Both groupings evaluate the same here (extracting from a null source yields null, exactly as
+    a false condition does), but the conditional-outermost reading is what the text says:
+
+        >>> df = pl.DataFrame({"bp": ["120/80", "NULL", None]})
+        >>> from dftly import Parser
+        >>> df.select(**Parser.to_polars(
+        ...     {"v": r'extract group 1 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp'}
+        ... ))["v"].to_list()
+        ['120', None, None]
+
+    The ``::`` / ``as`` distinction matters here. A local ``::`` cast is part of the source; an
+    ``as`` cast is the loosest operator in the grammar, so it applies to the *extraction result*:
+
+        >>> list(DftlyGrammar.parse_str(r"extract /\\d+/ from $n::str"))
+        ['regex_extract']
+        >>> list(DftlyGrammar.parse_str(r"extract /\\d+/ from $n as str"))
+        ['cast']
+
+    That is the same rule ``as`` follows everywhere else (``$a + $b as str`` casts the sum), but it
+    means ``as`` cannot be used to coerce a *source* into a string -- extraction would run first and
+    fail on the original dtype. Use ``::`` or parentheses for that:
+
+        >>> num = pl.DataFrame({"n": [123]})
+        >>> num.select(**Parser.to_polars({"v": r'extract /\\d+/ from $n::str'}))["v"].to_list()
+        ['123']
+        >>> num.select(**Parser.to_polars({"v": r'extract /\\d+/ from ($n as str)'}))["v"].to_list()
+        ['123']
     """
 
     KEY = "regex_extract"
@@ -322,6 +362,26 @@ class RegexMatch(KwargsOnlyFn):
         │ true  │
         │ false │
         └───────┘
+
+    In string form (``/pattern/ in $source``), this binds like a comparison operator: tighter than
+    ``and`` / ``or`` / ``not``, looser than arithmetic. So conjunctions of matches read the way
+    they look, without needing parentheses on each operand:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("/^a/ in $x and /^1/ in $y")
+        {'and': [{'regex_match': {'pattern': {'literal': '^a'}, 'source': {'column': 'x'}}},
+                 {'regex_match': {'pattern': {'literal': '^1'}, 'source': {'column': 'y'}}}]}
+        >>> DftlyGrammar.parse_str("/^a/ in $x and not /^1/ in $y")
+        {'and': [{'regex_match': {'pattern': {'literal': '^a'}, 'source': {'column': 'x'}}},
+                 {'not': [{'regex_match': {'pattern': {'literal': '^1'},
+                                           'source': {'column': 'y'}}}]}]}
+
+    Because the operand binds at the same level the comparison operators use, arithmetic on the
+    right-hand side is still absorbed into the source:
+
+        >>> DftlyGrammar.parse_str("/re/ in $a + $b")
+        {'regex_match': {'pattern': {'literal': 're'},
+                         'source': {'add': [{'column': 'a'}, {'column': 'b'}]}}}
     """
 
     KEY = "regex_match"
