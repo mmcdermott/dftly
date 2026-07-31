@@ -188,6 +188,16 @@ class DftlyGrammar(Transformer):
         Traceback (most recent call last):
             ...
         ValueError: Failed to parse literal abc
+
+    The TIME terminal's regex is looser than the set of real times -- it admits an hour like
+    ``29`` -- so ``time_literal`` reports the ones dateutil rejects:
+
+        >>> g.time_literal([Token("TIME", "10:30")])
+        {'literal': datetime.time(10, 30)}
+        >>> g.time_literal([Token("TIME", "29:59")])
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to parse literal 29:59
         >>> g._send_items([{"literal": 1}, {"literal": 2}], Literal)
         Traceback (most recent call last):
             ...

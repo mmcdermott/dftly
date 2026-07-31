@@ -135,9 +135,53 @@ UNARY_OPS = NodeBase.unique_dict_by_prop(__unary_ops, "SYM")
 # raises at import time if any ``CAST_NAME`` collides with another accessor or with a
 # registered type/unit in ``types.TYPES``, so cast-syntax dispatch can never be silently
 # shadowed by a future addition to either side.
-def _build_dt_cast_accessors() -> dict[str, type]:
+def _build_dt_cast_accessors(nodes: list[type] | None = None) -> dict[str, type]:
+    """Map ``CAST_NAME`` to accessor class for every registered ``_DtAccessor``.
+
+    Args:
+        nodes: The node classes to scan. Defaults to the registered node list; it is a parameter
+            so the collision guards below can be exercised without registering a broken node.
+
+    Returns:
+        A mapping of cast name to accessor class.
+
+    Raises:
+        ValueError: If two accessors declare the same ``CAST_NAME``, or if a ``CAST_NAME``
+            collides with a registered type/unit in ``types.TYPES``.
+
+    Examples:
+        >>> sorted(_build_dt_cast_accessors())[:3]
+        ['day_of_month', 'day_of_week', 'day_of_year']
+
+    Nodes that are not accessors, or that opt out with ``CAST_NAME = None``, are skipped:
+
+        >>> _build_dt_cast_accessors([Add, Column])
+        {}
+
+    Two accessors claiming one name is caught rather than silently letting the later win:
+
+        >>> class Dupe(DtYear):
+        ...     KEY = "dupe"
+        >>> _build_dt_cast_accessors([DtYear, Dupe])
+        Traceback (most recent call last):
+            ...
+        ValueError: Duplicate datetime cast accessor name 'year_of_date': DtYear and Dupe
+
+    So is a name that would be shadowed by a cast target in ``types.TYPES``:
+
+        >>> class Shadowed(DtYear):
+        ...     KEY = "shadowed"
+        ...     CAST_NAME = "minutes"
+        >>> _build_dt_cast_accessors([Shadowed])
+        Traceback (most recent call last):
+            ...
+        ValueError: Datetime cast accessor name 'minutes' for Shadowed collides with a
+        registered type/unit in nodes.types.TYPES
+    """
+    if nodes is None:
+        nodes = __nodes
     accessors: dict[str, type] = {}
-    for cls in __nodes:
+    for cls in nodes:
         if not issubclass(cls, _DtAccessor) or cls.CAST_NAME is None:
             continue
         if cls.CAST_NAME in accessors:
