@@ -135,7 +135,7 @@ String expression          Dict/YAML input
         - `Column` -- column references (`$col_name`)
     - `Nonterminal` -- nodes whose args must be other `NodeBase` instances
         - `ArgsOnlyFn` -- variadic positional args (Add, Min, Max, Mean, Coalesce, Hash)
-        - `KwargsOnlyFn` -- keyword args only (Conditional, Strptime, RegexExtract, RegexMatch)
+        - `KwargsOnlyFn` -- keyword args only (Conditional, Strptime, RegexExtract, RegexMatch, Cast)
         - `BinaryOp` -- exactly 2 positional args (Subtract, Divide, comparisons, SetTime)
         - `UnaryOp` -- exactly 1 positional arg (Not, Negate)
 

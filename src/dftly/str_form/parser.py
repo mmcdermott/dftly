@@ -7,6 +7,7 @@ from dateutil import parser as dt_parser
 
 from importlib.resources import files
 from lark import Lark, Token, Transformer
+from lark.exceptions import VisitError
 from lark.visitors import Discard
 
 from ..nodes import (
@@ -102,12 +103,34 @@ class DftlyGrammar(Transformer):
     `::` having higher precedence than arithmetic operations, and `as` having lower precedence.
 
         >>> DftlyGrammar.parse_str("4 + '3'::int")
-        {'add': [{'literal': 4}, {'cast': [{'literal': '3'}, {'literal': 'int'}]}]}
+        {'add': [{'literal': 4},
+                 {'cast': {'source': {'literal': '3'}, 'type': {'literal': 'int'}}}]}
         >>> DftlyGrammar.parse_str("'2023-' + '01-' + '01' as date")
-        {'cast': [{'add': [{'add': [{'literal': '2023-'},
-                                    {'literal': '01-'}]},
-                           {'literal': '01'}]},
-                  {'literal': 'date'}]}
+        {'cast': {'source': {'add': [{'add': [{'literal': '2023-'},
+                                              {'literal': '01-'}]},
+                                     {'literal': '01'}]},
+                  'type': {'literal': 'date'}}}
+
+    The ``?`` prefix marks a cast non-strict, exactly as it does for strptime formats: values that
+    cannot be converted become null instead of raising. Both spellings support it:
+
+        >>> DftlyGrammar.parse_str("$dosage::?float64")
+        {'cast': {'source': {'column': 'dosage'},
+                  'type': {'literal': 'float64'},
+                  'strict': {'literal': False}}}
+        >>> DftlyGrammar.parse_str("$dosage as ?float64")
+        {'cast': {'source': {'column': 'dosage'},
+                  'type': {'literal': 'float64'},
+                  'strict': {'literal': False}}}
+
+    The datetime accessors reachable through cast syntax extract a component rather than convert a
+    value, so there is no strictness to relax and ``?`` is rejected rather than quietly ignored:
+
+        >>> DftlyGrammar.parse_str("$ts::?hour_of_day")
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to parse expression '$ts::?hour_of_day': Non-strict casting (`::?`) is
+        not supported for accessor 'hour_of_day'; `strict` applies only to dtype casts.
 
     Unary operations are supported:
 
@@ -195,13 +218,27 @@ class DftlyGrammar(Transformer):
             Traceback (most recent call last):
                 ...
             ValueError: Failed to parse expression '???': ...
+
+        Errors raised inside transformer methods are reported the same way. Lark wraps those in a
+        ``VisitError`` whose message buries the actionable part under a rule name and a chained
+        traceback, so the underlying error is unwrapped here:
+
+            >>> DftlyGrammar.parse_str("nonexistent_fn($a)")
+            Traceback (most recent call last):
+                ...
+            ValueError: Failed to parse expression 'nonexistent_fn($a)': Unsupported function: ...
         """
         try:
             tree = GRAMMAR.parse(s)
         except Exception as e:
             raise ValueError(f"Failed to parse expression {s!r}: {e}") from e
 
-        return cls().transform(tree)
+        try:
+            return cls().transform(tree)
+        except VisitError as e:
+            raise ValueError(
+                f"Failed to parse expression {s!r}: {e.orig_exc}"
+            ) from e.orig_exc
 
     # TIME intentionally omitted: parsed at the rule level via ``time_literal`` so the
     # raw Token remains accessible to the substring slice-spec handler, which needs to
@@ -301,6 +338,24 @@ class DftlyGrammar(Transformer):
         if name in DT_CAST_ACCESSORS:
             return DT_CAST_ACCESSORS[name].from_lark([input])
         return Cast.from_lark([input, Literal.from_lark(output_type)])
+
+    def cast_expr_nonstrict(self, items: list[Any]) -> dict:
+        # `::?<type>` is the dtype-cast counterpart to `::?"%fmt"`: both set the underlying
+        # polars `strict=` flag to False, meaning "on failure, null instead of raise". The
+        # datetime accessors reached through cast syntax (`::hour_of_day`, ...) are extractions,
+        # not conversions, so there is no `strict` to forward and `?` is rejected rather than
+        # silently ignored. Implicit unit casts (`::?minutes`) are rejected in Cast.__post_init__,
+        # which covers the dict form too.
+        input, output_type = items
+        name = str(output_type)
+        if name in DT_CAST_ACCESSORS:
+            raise ValueError(
+                f"Non-strict casting (`::?`) is not supported for accessor {name!r}; `strict` "
+                "applies only to dtype casts."
+            )
+        result = Cast.from_lark([input, Literal.from_lark(output_type)])
+        result[Cast.KEY]["strict"] = Literal.from_lark(False)
+        return result
 
     def coalesce_op(self, items: list[Any]) -> dict:
         # Null-coalescing `left ?? right` is sugar for the existing `coalesce` node. The
