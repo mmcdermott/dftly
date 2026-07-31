@@ -827,6 +827,13 @@ class Substring(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: Extra unallowed keys for substring: {'step'}
+
+    ``from_lark`` accepts only the 2- and 3-argument function forms:
+
+        >>> Substring.from_lark([{"column": "code"}])
+        Traceback (most recent call last):
+            ...
+        ValueError: substring expects 2 or 3 positional arguments; got 1
     """
 
     KEY = "substring"
