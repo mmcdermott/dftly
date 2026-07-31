@@ -116,6 +116,11 @@ __binary_ops = [node for node in __nodes if issubclass(node, BinaryOp)]
 __binary_ops.extend(
     [Add, Multiply, And, Or]
 )  # Additional n-ary ops that can be used as binary ops
+# ``Cast`` carries SYM = "::" but is a KwargsOnlyFn (its canonical base form is
+# ``{source, type, strict}``), so it is registered here explicitly rather than being picked up by
+# the BinaryOp scan above. Its ``from_lark`` still accepts the ``[left, right]`` pair that the
+# binary-op dispatch would hand it.
+__binary_ops.append(Cast)
 
 BINARY_OPS = NodeBase.unique_dict_by_prop(__binary_ops, "SYM")
 
