@@ -55,6 +55,7 @@ from .str import (
     Split,
 )
 from .conditional import Conditional
+from .frame import Explode
 from .types import Cast, TYPES
 
 __nodes = [
@@ -88,6 +89,7 @@ __nodes = [
     Substring,
     Split,
     Conditional,
+    Explode,
     Cast,
     Strptime,
     SetTime,
