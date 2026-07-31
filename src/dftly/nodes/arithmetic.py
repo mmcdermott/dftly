@@ -203,17 +203,59 @@ class Or(ArgsOnlyFn):
 class Add(ArgsOnlyFn):
     """This non-terminal node represents the addition of multiple expressions.
 
+    Compiles to a left fold over polars' binary ``+`` (like :class:`Multiply`), *not* to
+    ``pl.sum_horizontal``. That distinction matters in two ways, both of which make ``+`` behave
+    like the other arithmetic operators rather than like an aggregation:
+
+    1. Nulls propagate, rather than being skipped as if they were zero.
+    2. Operand dtypes are resolved by polars' binary-op rules rather than being cast to a common
+       supertype, so mixed-type arithmetic such as ``Datetime + Duration`` dispatches to polars'
+       native temporal arithmetic.
+
+    If you want null-skipping addition, use an explicit :class:`Coalesce` on the operands.
+
     Example:
         >>> from dftly.nodes import Literal
         >>> pl.select(Add(Literal(1), Literal(2), Literal(3)).polars_expr).item()
         6
         >>> pl.select(Add(Literal("hello "), Literal("world")).polars_expr).item()
         'hello world'
+
+    Nulls propagate, matching :class:`Subtract`, :class:`Multiply`, and :class:`Divide`:
+
+        >>> df = pl.DataFrame({"a": [1, None], "b": [2, 2]})
+        >>> from dftly.nodes import Column
+        >>> df.select(Add(Column("a"), Column("b")).polars_expr.alias("v"))["v"].to_list()
+        [3, None]
+
+    A ``Duration`` can be added to a ``Datetime`` to shift the timestamp, which is the natural
+    shape for offset-time data (an anchor timestamp plus an offset in some unit):
+
+        >>> from dftly.nodes import Cast, Strptime
+        >>> ts = Strptime(format=Literal("%Y-%m-%d %H:%M:%S"), source=Literal("2014-12-31 13:45:00"))
+        >>> offset = Cast(Literal(90), Literal("minutes"))
+        >>> pl.select(Add(ts, offset).polars_expr).item()
+        datetime.datetime(2014, 12, 31, 15, 15)
+
+    At least one argument is required:
+
+        >>> Add().polars_expr
+        Traceback (most recent call last):
+            ...
+        ValueError: add requires at least one argument; got 0
     """
 
     KEY = "add"
     SYM = "+"
-    pl_fn = pl.sum_horizontal
+
+    @classmethod
+    def pl_fn(cls, *args: pl.Expr) -> pl.Expr:
+        if not args:
+            raise ValueError(f"{cls.KEY} requires at least one argument; got 0")
+        result = args[0]
+        for expr in args[1:]:
+            result = result + expr
+        return result
 
 
 class Subtract(BinaryOp):
