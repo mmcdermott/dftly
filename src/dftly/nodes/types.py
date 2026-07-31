@@ -276,20 +276,7 @@ class Cast(KwargsOnlyFn):
 
     @property
     def strict(self) -> bool:
-        strict_node = self.kwargs.get("strict", None)
-        if strict_node is None:
-            return True  # default: strict=True, matching polars
-        if not isinstance(strict_node, NodeBase):
-            raise ValueError(
-                "The strict argument must be a NodeBase instance that evaluates to a boolean."
-            )
-        try:
-            val = pl.select(strict_node.polars_expr).item()
-        except Exception as e:
-            raise ValueError("The strict argument must evaluate to a boolean.") from e
-        if not isinstance(val, bool):
-            raise ValueError(f"The strict argument must be a boolean, got {type(val)}")
-        return val
+        return self.literal_kwarg("strict", bool, default=True)
 
     @property
     def polars_expr(self) -> pl.Expr:

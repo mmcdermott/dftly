@@ -16,6 +16,9 @@ import polars as pl
 from .utils import validate_dict_keys
 
 
+#: Sentinel for `literal_kwarg`'s `default`, distinguishing "absent" from "defaults to None".
+_REQUIRED = object()
+
 EXPRESSION_KEY = "expression"
 EXPRESSION_TYPE_KEY = "type"
 
@@ -440,6 +443,117 @@ class NodeBase(ABC):
             if isinstance(val, NodeBase):
                 cols |= val.referenced_columns
         return cols
+
+    #: Human-readable names for the types :meth:`literal_kwarg` can check, used in error messages.
+    _LITERAL_TYPE_NAMES: ClassVar[dict[type, str]] = {
+        bool: "boolean",
+        str: "string",
+        int: "integer",
+        float: "float",
+    }
+
+    def literal_kwarg(
+        self,
+        name: str,
+        expected_type: type,
+        *,
+        default: Any = _REQUIRED,
+        type_name: str | None = None,
+    ) -> Any:
+        """Evaluate a keyword argument to a plain Python literal of ``expected_type``.
+
+        Several nodes take configuration arguments that must resolve to a constant outside of any
+        polars context -- ``Strptime``'s and ``Cast``'s ``strict``, ``Split``'s ``drop_empty``.
+        Each needs the same four checks, so they live here rather than being restated per node.
+
+        Args:
+            name: The keyword argument to read.
+            expected_type: The Python type the argument must evaluate to.
+            default: Value to return when the argument is absent. If omitted, absence is an error.
+            type_name: Override for the type's name in error messages.
+
+        Returns:
+            The evaluated literal.
+
+        Raises:
+            ValueError: If the argument is absent with no default, is not a node, cannot be
+                evaluated outside a polars context, or evaluates to the wrong type.
+
+        Examples:
+            >>> class Demo(NodeBase):
+            ...     KEY = "demo"
+            ...     def __post_init__(self): pass
+            ...     @property
+            ...     def polars_expr(self): pass
+            ...     @classmethod
+            ...     def from_lark(cls, items): pass
+            >>> Demo(strict=Literal(False)).literal_kwarg("strict", bool, default=True)
+            False
+
+        The default is returned when the argument is absent, and only then:
+
+            >>> Demo().literal_kwarg("strict", bool, default=True)
+            True
+            >>> Demo().literal_kwarg("strict", bool)
+            Traceback (most recent call last):
+                ...
+            ValueError: The strict argument is required.
+
+        A non-node value, an unevaluatable node, and a wrong-typed result are each distinguished:
+
+            >>> Demo(strict="yes").literal_kwarg("strict", bool)
+            Traceback (most recent call last):
+                ...
+            ValueError: The strict argument must be a NodeBase instance that evaluates to a boolean.
+            >>> Demo(strict=Column("x")).literal_kwarg("strict", bool)
+            Traceback (most recent call last):
+                ...
+            ValueError: The strict argument must evaluate to a boolean.
+            >>> Demo(strict=Literal("yes")).literal_kwarg("strict", bool)
+            Traceback (most recent call last):
+                ...
+            ValueError: The strict argument must be a boolean, got <class 'str'>
+
+        Booleans are not accepted where an integer is wanted, despite ``bool`` subclassing ``int``:
+
+            >>> Demo(n=Literal(3)).literal_kwarg("n", int)
+            3
+            >>> Demo(n=Literal(True)).literal_kwarg("n", int)
+            Traceback (most recent call last):
+                ...
+            ValueError: The n argument must be a integer, got <class 'bool'>
+        """
+        type_name = type_name or self._LITERAL_TYPE_NAMES.get(
+            expected_type, expected_type.__name__
+        )
+
+        node = self.kwargs.get(name, None)
+        if node is None:
+            if default is _REQUIRED:
+                raise ValueError(f"The {name} argument is required.")
+            return default
+
+        if not isinstance(node, NodeBase):
+            raise ValueError(
+                f"The {name} argument must be a NodeBase instance that evaluates to a {type_name}."
+            )
+
+        try:
+            value = pl.select(node.polars_expr).item()
+        except Exception as e:
+            raise ValueError(
+                f"The {name} argument must evaluate to a {type_name}."
+            ) from e
+
+        # bool subclasses int, so an int-typed argument must reject True/False explicitly.
+        wrong_type = not isinstance(value, expected_type) or (
+            expected_type is not bool and isinstance(value, bool)
+        )
+        if wrong_type:
+            raise ValueError(
+                f"The {name} argument must be a {type_name}, got {type(value)}"
+            )
+        return value
 
     @property
     @abstractmethod
