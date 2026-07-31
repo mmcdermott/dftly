@@ -237,9 +237,9 @@ class RegexExtract(KwargsOnlyFn):
         ValueError: The group_index argument must be an integer or a NodeBase instance ...can't be evaluated...
 
     In string form, ``extract /re/ from ...`` takes its source at the same ``additive`` level the
-    comparison operators use. The source therefore absorbs arithmetic and casts, but stops at
-    ``if`` / ``and`` / ``or`` -- so a trailing conditional wraps the extraction rather than being
-    swallowed into the string being extracted from:
+    comparison operators use. The source therefore absorbs arithmetic and *local* ``::`` casts, but
+    stops at ``if`` / ``and`` / ``or`` -- so a trailing conditional wraps the extraction rather than
+    being swallowed into the string being extracted from:
 
         >>> from dftly.str_form.parser import DftlyGrammar
         >>> tree = DftlyGrammar.parse_str("extract /(a)(b)/ from $bp if /(a)(b)/ in $bp")
@@ -257,6 +257,24 @@ class RegexExtract(KwargsOnlyFn):
         ...     {"v": r'extract group 1 of /(\\d+)\\/(\\d+)/ from $bp if /(\\d+)\\/(\\d+)/ in $bp'}
         ... ))["v"].to_list()
         ['120', None, None]
+
+    The ``::`` / ``as`` distinction matters here. A local ``::`` cast is part of the source; an
+    ``as`` cast is the loosest operator in the grammar, so it applies to the *extraction result*:
+
+        >>> list(DftlyGrammar.parse_str(r"extract /\\d+/ from $n::str"))
+        ['regex_extract']
+        >>> list(DftlyGrammar.parse_str(r"extract /\\d+/ from $n as str"))
+        ['cast']
+
+    That is the same rule ``as`` follows everywhere else (``$a + $b as str`` casts the sum), but it
+    means ``as`` cannot be used to coerce a *source* into a string -- extraction would run first and
+    fail on the original dtype. Use ``::`` or parentheses for that:
+
+        >>> num = pl.DataFrame({"n": [123]})
+        >>> num.select(**Parser.to_polars({"v": r'extract /\\d+/ from $n::str'}))["v"].to_list()
+        ['123']
+        >>> num.select(**Parser.to_polars({"v": r'extract /\\d+/ from ($n as str)'}))["v"].to_list()
+        ['123']
     """
 
     KEY = "regex_extract"
