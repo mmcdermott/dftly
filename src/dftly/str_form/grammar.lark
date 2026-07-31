@@ -1,7 +1,7 @@
 // Dftly expression grammar (LALR(1))
 //
 // Precedence (lowest to highest):
-//   1. global_cast   — `... as type` / `... as '%fmt'` / `... @ TIME`
+//   1. global_cast   — `... as type` / `... as '%fmt'` / `... @ TIME` (`?` prefix = non-strict)
 //   2. conditional    — `... if ... else ...`
 //   3. coalesce_expr  — `??` null-coalescing (desugars to the `coalesce` node)
 //   4. bool_or        — `or`, `||`
@@ -12,7 +12,7 @@
 //   7. additive       — `+`, `-`
 //   8. multiplicative — `*`, `/`
 //   9. exp_expr       — `**` (right-associative)
-//  10. local_cast     — `::type` / `::'%fmt'`
+//  10. local_cast     — `::type` / `::'%fmt'` (`?` prefix = non-strict, e.g. `::?float64`)
 //  11. unary          — `not`, `!`, unary `+`/`-`
 //  12. postfix        — `[start:stop]` substring shorthand (binds tighter than unary)
 //  13. primary        — literals, columns, function calls, regex, parenthesized expressions
@@ -86,6 +86,7 @@ FROM.2: /from/i
 
 // Lowest precedence: global cast with `as`/`@` binds last
 ?global_cast: conditional AS NAME   -> cast_expr
+            | conditional AS QUESTION NAME -> cast_expr_nonstrict
             | conditional AS STRING -> strptime
             | conditional AS QUESTION STRING -> strptime_nonstrict
             | conditional AT time_literal   -> binary_expr
@@ -133,6 +134,7 @@ FROM.2: /from/i
 
 // Higher precedence: local cast with `::` binds tighter than arithmetic
 ?local_cast: unary CAST NAME   -> cast_expr
+           | unary CAST QUESTION NAME -> cast_expr_nonstrict
            | unary CAST STRING -> strptime
            | unary CAST QUESTION STRING -> strptime_nonstrict
            | unary
