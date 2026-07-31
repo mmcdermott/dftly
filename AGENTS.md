@@ -223,6 +223,10 @@ pre-commit run --all-files
     `_ArgsFn.polars_expr` calls `self.__class__.pl_fn(*args)`, which resolves correctly for a
     plain function and for a classmethod alike.
 - Keyword-only nodes validate via `REQUIRED_KWARGS` and `OPTIONAL_KWARGS` sets.
+- Configuration kwargs that must resolve to a constant outside any polars context (`strict`,
+    `drop_empty`, ...) go through `NodeBase.literal_kwarg(name, type, default=...)` rather than
+    hand-rolling the node/evaluatability/type checks. It produces uniform error messages and
+    rejects `bool` where an `int` is wanted.
 - Custom transformer methods in `DftlyGrammar` (like `cast_expr`, `strptime_nonstrict`) are
     acceptable when the grammar needs to wrap tokens into the base form, but they must still
     produce dicts keyed by the correct node KEY.

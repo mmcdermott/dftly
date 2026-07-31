@@ -533,20 +533,7 @@ class Strptime(KwargsOnlyFn):
 
     @property
     def strict(self) -> bool:
-        strict_node = self.kwargs.get("strict", None)
-        if strict_node is None:
-            return True  # default: strict=True for backwards compatibility
-        if not isinstance(strict_node, NodeBase):
-            raise ValueError(
-                "The strict argument must be a NodeBase instance that evaluates to a boolean."
-            )
-        try:
-            val = pl.select(strict_node.polars_expr).item()
-        except Exception as e:
-            raise ValueError("The strict argument must evaluate to a boolean.") from e
-        if not isinstance(val, bool):
-            raise ValueError(f"The strict argument must be a boolean, got {type(val)}")
-        return val
+        return self.literal_kwarg("strict", bool, default=True)
 
     @property
     def polars_expr(self) -> pl.Expr:
@@ -911,24 +898,7 @@ class Split(KwargsOnlyFn):
 
     @property
     def drop_empty(self) -> bool:
-        node = self.kwargs.get("drop_empty", None)
-        if node is None:
-            return False  # default: preserve empty elements, matching pl.Expr.str.split
-        if not isinstance(node, NodeBase):
-            raise ValueError(
-                "The drop_empty argument must be a NodeBase instance that evaluates to a boolean."
-            )
-        try:
-            val = pl.select(node.polars_expr).item()
-        except Exception as e:
-            raise ValueError(
-                "The drop_empty argument must evaluate to a boolean."
-            ) from e
-        if not isinstance(val, bool):
-            raise ValueError(
-                f"The drop_empty argument must be a boolean, got {type(val)}"
-            )
-        return val
+        return self.literal_kwarg("drop_empty", bool, default=False)
 
     @property
     def polars_expr(self) -> pl.Expr:
