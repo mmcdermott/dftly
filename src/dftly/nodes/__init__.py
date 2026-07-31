@@ -52,6 +52,7 @@ from .str import (
     Strptime,
     LenChars,
     Substring,
+    Split,
 )
 from .conditional import Conditional
 from .types import Cast, TYPES
@@ -85,6 +86,7 @@ __nodes = [
     RegexMatch,
     LenChars,
     Substring,
+    Split,
     Conditional,
     Cast,
     Strptime,
