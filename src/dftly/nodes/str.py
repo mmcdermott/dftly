@@ -931,43 +931,16 @@ class Split(KwargsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: split expects exactly 2 positional arguments (source, by); got 1
-
-    Empty elements can be dropped with the optional ``drop_empty`` kwarg. Polars' ``str.split``
-    has no such option -- it takes only ``inclusive`` -- so this filters the resulting list.
-    ``list.drop_nulls()`` would not serve, since split produces empty *strings*, not nulls:
-
-        >>> df = pl.DataFrame({"c": ["a,,b", ",a,", "", None]})
-        >>> node = Split(source=Column("c"), by=Literal(","), drop_empty=Literal(True))
-        >>> df.select(node.polars_expr)["c"].to_list()
-        [['a', 'b'], ['a'], [], None]
-
-    Note the last two rows: an entirely empty input collapses to an empty list ``[]`` rather than
-    ``['']``, while a null input stays null rather than becoming ``[]``.
-
-    ``drop_empty`` must evaluate to a boolean:
-
-        >>> Split(source=Literal("a,b"), by=Literal(","), drop_empty=Literal("yes")).polars_expr
-        Traceback (most recent call last):
-            ...
-        ValueError: The drop_empty argument must be a boolean, ...
     """
 
     KEY = "split"
     REQUIRED_KWARGS = {"source", "by"}
-    OPTIONAL_KWARGS = {"drop_empty"}
-
-    @property
-    def drop_empty(self) -> bool:
-        return self.literal_kwarg("drop_empty", bool, default=False)
 
     @property
     def polars_expr(self) -> pl.Expr:
-        expr = self.kwargs["source"].polars_expr.str.split(
+        return self.kwargs["source"].polars_expr.str.split(
             self.kwargs["by"].polars_expr
         )
-        if self.drop_empty:
-            expr = expr.list.eval(pl.element().filter(pl.element() != ""))
-        return expr
 
     @classmethod
     def from_lark(cls, items: list[Any]) -> dict[str, Any]:
