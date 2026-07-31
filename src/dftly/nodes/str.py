@@ -26,10 +26,10 @@ class StringInterpolate(ArgsOnlyFn):
         │ Alice │
         │ Bob   │
         └───────┘
-        >>> df.select(StringInterpolate(Literal("hello {}"), Column("name")).polars_expr)
+        >>> df.select(StringInterpolate(Literal("hello {}"), Column("name")).polars_expr.alias("greeting"))
         shape: (2, 1)
         ┌─────────────┐
-        │ literal     │
+        │ greeting    │
         │ ---         │
         │ str         │
         ╞═════════════╡
@@ -40,10 +40,12 @@ class StringInterpolate(ArgsOnlyFn):
     The pattern string can also be constructed from other nodes that evaluate to strings:
 
         >>> from dftly.nodes import Add
-        >>> df.select(StringInterpolate(Add(Literal("hello "), Literal("{}")), Column("name")).polars_expr)
+        >>> df.select(
+        ...     StringInterpolate(Add(Literal("hello "), Literal("{}")), Column("name")).polars_expr.alias("greeting")
+        ... )
         shape: (2, 1)
         ┌─────────────┐
-        │ literal     │
+        │ greeting    │
         │ ---         │
         │ str         │
         ╞═════════════╡
