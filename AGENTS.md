@@ -217,7 +217,11 @@ pre-commit run --all-files
 - Column references use `$` prefix in string form (`$col_name`).
 - `from_lark` must return `{cls.KEY: args_or_kwargs}` -- never a different node's key.
 - `polars_expr` is a property, not a method.
-- `pl_fn` is a `ClassVar` on `ArgsOnlyFn` subclasses -- don't use `@classmethod` for it.
+- `pl_fn` on `ArgsOnlyFn` subclasses is normally a `ClassVar` holding a bare polars callable
+    (`pl_fn = pl.any_horizontal`). Use a `@classmethod` only when the node folds its arguments and
+    has no single polars equivalent -- `Add` and `Multiply` both do this. Either form works:
+    `_ArgsFn.polars_expr` calls `self.__class__.pl_fn(*args)`, which resolves correctly for a
+    plain function and for a classmethod alike.
 - Keyword-only nodes validate via `REQUIRED_KWARGS` and `OPTIONAL_KWARGS` sets.
 - Custom transformer methods in `DftlyGrammar` (like `cast_expr`, `strptime_nonstrict`) are
     acceptable when the grammar needs to wrap tokens into the base form, but they must still

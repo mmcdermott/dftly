@@ -203,17 +203,6 @@ class Or(ArgsOnlyFn):
 class Add(ArgsOnlyFn):
     """This non-terminal node represents the addition of multiple expressions.
 
-    Compiles to a left fold over polars' binary ``+`` (like :class:`Multiply`), *not* to
-    ``pl.sum_horizontal``. That distinction matters in two ways, both of which make ``+`` behave
-    like the other arithmetic operators rather than like an aggregation:
-
-    1. Nulls propagate, rather than being skipped as if they were zero.
-    2. Operand dtypes are resolved by polars' binary-op rules rather than being cast to a common
-       supertype, so mixed-type arithmetic such as ``Datetime + Duration`` dispatches to polars'
-       native temporal arithmetic.
-
-    If you want null-skipping addition, use an explicit :class:`Coalesce` on the operands.
-
     Example:
         >>> from dftly.nodes import Literal
         >>> pl.select(Add(Literal(1), Literal(2), Literal(3)).polars_expr).item()
