@@ -463,8 +463,8 @@ class NodeBase(ABC):
         """Evaluate a keyword argument to a plain Python literal of ``expected_type``.
 
         Several nodes take configuration arguments that must resolve to a constant outside of any
-        polars context -- ``Strptime``'s and ``Cast``'s ``strict``, ``Split``'s ``drop_empty``.
-        Each needs the same four checks, so they live here rather than being restated per node.
+        polars context -- ``Strptime``'s and ``Cast``'s ``strict``, for instance. Each needs the
+        same four checks, so they live here rather than being restated per node.
 
         Args:
             name: The keyword argument to read.
