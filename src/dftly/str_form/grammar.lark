@@ -6,7 +6,9 @@
 //   3. coalesce_expr  — `??` null-coalescing (desugars to the `coalesce` node)
 //   4. bool_or        — `or`, `||`
 //   5. bool_and       — `and`, `&&`  (AND binds tighter than OR, as in Python/SQL/C)
-//   6. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`
+//   6. comparison     — `==`, `!=`, `>`, `<`, `>=`, `<=`, and the regex forms
+//                       (`/re/ in ...`, `extract /re/ from ...`), whose operands bind at the
+//                       same `additive` level the comparison operators use
 //   7. additive       — `+`, `-`
 //   8. multiplicative — `*`, `/`
 //   9. exp_expr       — `**` (right-associative)
@@ -167,8 +169,23 @@ FROM.2: /from/i
 ?call_expr: NAME "(" [args] ")"   -> func
 ?args: expr ("," expr)*
 
-?regex: EXTRACT (GROUP INT OF)? REGEX_LITERAL FROM expr -> regex_extract
-      | REGEX_LITERAL IN expr -> regex_match
+// Regex forms. Both take `additive` as their operand rather than `expr`, which is what makes
+// them bind like the comparison operators do.
+//
+// These rules live at `primary` (so `not /re/ in $x` works, and so `extract ...` can appear
+// anywhere a value can), but their operand is a *precedence level*, not a delimited group --
+// there is no closing token to stop it. Using `expr` there meant the operand was parsed at the
+// loosest level, so it swallowed everything to its right:
+//
+//     /^a/ in $x and /^1/ in $y
+//         -> regex_match(^a, source = ($x and regex_match(^1, $y)))    // wrong
+//
+// which then fails at evaluation with "expected String type, got: bool". `additive` is exactly
+// the level `?comparison` gives its own operands, so `in` now binds like `==`: tighter than
+// `and`/`or`/`not`, looser than arithmetic. `/re/ in $a + $b` still reads the whole sum as the
+// operand; `/^a/ in $x and ...` no longer captures the conjunction.
+?regex: EXTRACT (GROUP INT OF)? REGEX_LITERAL FROM additive -> regex_extract
+      | REGEX_LITERAL IN additive -> regex_match
 
 ?primary: regex
         | call_expr
