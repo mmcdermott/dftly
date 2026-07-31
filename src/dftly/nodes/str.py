@@ -827,3 +827,123 @@ class Substring(KwargsOnlyFn):
                 f"substring expects 2 or 3 positional arguments; got {len(items)}"
             )
         return {cls.KEY: kwargs}
+
+
+class Split(KwargsOnlyFn):
+    """This node splits a string into a ``List(String)`` on a literal separator.
+
+    This node only accepts keyword arguments, and requires "source" and "by" keys. The "source" key is the
+    string node to split, and the "by" key is the separator. Lowers to ``pl.Expr.str.split``.
+
+    The separator is a **literal**, not a regex, so regex metacharacters need no escaping:
+
+        >>> from dftly.nodes import Literal, Column
+        >>> pl.select(Split(source=Literal("a.b.c"), by=Literal(".")).polars_expr).item().to_list()
+        ['a', 'b', 'c']
+
+    Example:
+        >>> df = pl.DataFrame({"codes": ["250.00, E11.9", "038.9, 518.81, J96.0", "486"]})
+        >>> df.select(Split(source=Column("codes"), by=Literal(", ")).polars_expr)
+        shape: (3, 1)
+        ┌──────────────────────────────┐
+        │ codes                        │
+        │ ---                          │
+        │ list[str]                    │
+        ╞══════════════════════════════╡
+        │ ["250.00", "E11.9"]          │
+        │ ["038.9", "518.81", "J96.0"] │
+        │ ["486"]                      │
+        └──────────────────────────────┘
+
+    Empty and null handling is worth being explicit about, since the two differ and neither
+    produces an empty list. Empty elements are preserved, and an empty input string yields a
+    one-element list containing the empty string -- not ``[]``:
+
+        >>> df = pl.DataFrame({"c": ["a,,b", "", None]})
+        >>> df.select(Split(source=Column("c"), by=Literal(",")).polars_expr)["c"].to_list()
+        [['a', '', 'b'], [''], None]
+
+    It parses from string form via the function-call grammar:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str('split($icd9code, ", ")')
+        {'split': {'source': {'column': 'icd9code'}, 'by': {'literal': ', '}}}
+
+    The separator may itself be an expression, not just a literal:
+
+        >>> DftlyGrammar.parse_str("split($a, $sep)")
+        {'split': {'source': {'column': 'a'}, 'by': {'column': 'sep'}}}
+
+    Both required kwargs must be present:
+
+        >>> Split(source=Literal("a,b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: Missing required keys for split: {'by'}
+        >>> Split.from_lark([{"column": "a"}])
+        Traceback (most recent call last):
+            ...
+        ValueError: split expects exactly 2 positional arguments (source, by); got 1
+
+    Empty elements can be dropped with the optional ``drop_empty`` kwarg. Polars' ``str.split``
+    has no such option -- it takes only ``inclusive`` -- so this filters the resulting list.
+    ``list.drop_nulls()`` would not serve, since split produces empty *strings*, not nulls:
+
+        >>> df = pl.DataFrame({"c": ["a,,b", ",a,", "", None]})
+        >>> node = Split(source=Column("c"), by=Literal(","), drop_empty=Literal(True))
+        >>> df.select(node.polars_expr)["c"].to_list()
+        [['a', 'b'], ['a'], [], None]
+
+    Note the last two rows: an entirely empty input collapses to an empty list ``[]`` rather than
+    ``['']``, while a null input stays null rather than becoming ``[]``.
+
+    ``drop_empty`` must evaluate to a boolean:
+
+        >>> Split(source=Literal("a,b"), by=Literal(","), drop_empty=Literal("yes")).polars_expr
+        Traceback (most recent call last):
+            ...
+        ValueError: The drop_empty argument must be a boolean, ...
+    """
+
+    KEY = "split"
+    REQUIRED_KWARGS = {"source", "by"}
+    OPTIONAL_KWARGS = {"drop_empty"}
+
+    @property
+    def drop_empty(self) -> bool:
+        node = self.kwargs.get("drop_empty", None)
+        if node is None:
+            return False  # default: preserve empty elements, matching pl.Expr.str.split
+        if not isinstance(node, NodeBase):
+            raise ValueError(
+                "The drop_empty argument must be a NodeBase instance that evaluates to a boolean."
+            )
+        try:
+            val = pl.select(node.polars_expr).item()
+        except Exception as e:
+            raise ValueError(
+                "The drop_empty argument must evaluate to a boolean."
+            ) from e
+        if not isinstance(val, bool):
+            raise ValueError(
+                f"The drop_empty argument must be a boolean, got {type(val)}"
+            )
+        return val
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        expr = self.kwargs["source"].polars_expr.str.split(
+            self.kwargs["by"].polars_expr
+        )
+        if self.drop_empty:
+            expr = expr.list.eval(pl.element().filter(pl.element() != ""))
+        return expr
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
+        if len(items) != 2:
+            raise ValueError(
+                f"{cls.KEY} expects exactly 2 positional arguments (source, by); got {len(items)}"
+            )
+        source, by = items
+        return {cls.KEY: {"source": source, "by": by}}
