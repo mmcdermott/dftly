@@ -202,6 +202,48 @@ Every datetime/duration accessor also exists as a function-call form — `dt_hou
 `dt_total_seconds($delta)`, etc. — for use in programmatic construction or when the cast
 form doesn't compose cleanly. The two are always equivalent.
 
+### Non-strict conversion with `::?`
+
+Real-world source columns are often "mostly" the type they claim to be — a `VARCHAR` dose column
+holding `"25"` alongside `"1000 MG"`, or a date column with a few unparsable entries. Prefixing
+the cast target with `?` makes the conversion non-strict: values that cannot be converted become
+null instead of raising. This works for both type casts and strptime formats, and means the same
+thing in both (it sets Polars' `strict=False`):
+
+```python
+>>> messy = pl.DataFrame({
+...     "dose": ["25", "1000 MG", "1.5E-3", ""],
+...     "dod": ["2020-06-20", "not a date", "2021-01-05", "2019-12-31"],
+... })
+>>> ops = r"""
+... numeric_value: '$dose::?float64'
+... death_date: '$dod::?"%Y-%m-%d"'
+... """
+>>> messy.select(**Parser.to_polars(ops))
+shape: (4, 2)
+┌───────────────┬────────────┐
+│ numeric_value ┆ death_date │
+│ ---           ┆ ---        │
+│ f64           ┆ date       │
+╞═══════════════╪════════════╡
+│ 25.0          ┆ 2020-06-20 │
+│ null          ┆ null       │
+│ 0.0015        ┆ 2021-01-05 │
+│ null          ┆ 2019-12-31 │
+└───────────────┴────────────┘
+
+```
+
+Without the `?`, both forms raise on the first unconvertible value, which is the right default —
+`?` is how you opt in to dropping data. Because it delegates to Polars' own parser, `::?float64`
+accepts everything Polars accepts (`1.5E-3`, `+5`, `inf`, `nan`) rather than whatever subset a
+hand-written regex guard happens to cover.
+
+The `?` prefix applies only to real dtype casts. The duration/date unit casts (`::minutes`,
+`::year`) build values with `pl.duration()`/`pl.date()`, and the datetime accessors
+(`::hour_of_day`) extract a component — none of these have a strictness to relax, so `::?minutes`
+and `::?hour_of_day` are errors rather than silent no-ops.
+
 ### Position-based string operations
 
 `len_chars($col)` returns the Unicode character count of a string column, and

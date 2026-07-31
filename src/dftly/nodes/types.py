@@ -1,7 +1,7 @@
 """Nodes relating to type casting."""
 
-from typing import Callable
-from .base import BinaryOp, NodeBase
+from typing import Any, Callable
+from .base import KwargsOnlyFn, NodeBase
 import polars as pl
 
 NUMERIC_TYPES: dict[str, pl.DataType] = {
@@ -73,17 +73,34 @@ TYPES.update({k: pl.Duration for k in IMPLICIT_DURATION_TYPES})
 TYPES.update({k: pl.Date for k in IMPLICIT_DATE_TYPES})
 
 
-class Cast(BinaryOp):
-    """This non-terminal node casts the left expression to the type specified by the right expression.
+class Cast(KwargsOnlyFn):
+    """This non-terminal node casts a source expression to the type named by its ``type`` argument.
 
-    The right node of this expression must evaluate to a string literal outside of any specific polars context
-    that is one of the supported types defined in the `TYPES` dictionary. Most of the supported types are
-    standard polars types, but some common aliases are also supported (e.g. "int" for "Int32", "float" for
-    "Float32", and "str" for "Utf8").
+    The ``type`` node must evaluate to a string literal outside of any specific polars context that is one of
+    the supported types defined in the `TYPES` dictionary. Most of the supported types are standard polars
+    types, but some common aliases are also supported (e.g. "int" for "Int32", "float" for "Float32", and
+    "str" for "Utf8").
 
     In addition, some custom types are added which resolve to standard polars types through a more complex
     mapping; in particular, duration units ("seconds", "minutes", "hours", "days", "weeks", "months", "years")
     convert numeric values into durations, and "year" converts an integer into a date at the start of that year.
+
+    The optional ``strict`` argument controls what happens to values that cannot be converted. It mirrors
+    :class:`~dftly.nodes.str.Strptime`'s ``strict`` argument, and for the same reason -- both lower onto a
+    polars ``strict=`` parameter meaning "on failure, produce null instead of raising":
+
+    ==============================  ===============================  ==================
+    dftly                           polars                           ``strict=False``
+    ==============================  ===============================  ==================
+    ``$x::?"%Y-%m-%d"``             ``.str.strptime(..., strict=)``   unparsable -> null
+    ``$x::?float64``                ``.cast(..., strict=)``           unconvertible -> null
+    ==============================  ===============================  ==================
+
+    ``strict`` defaults to ``True`` (raise), matching polars.
+
+    For convenience, this node also accepts its two required arguments positionally -- ``Cast(source, type)``
+    and the base form ``{"cast": [source, type]}`` are sugar for the canonical keyword form. Positional form
+    cannot carry ``strict``; use the keyword form for that.
 
     Example:
         >>> from dftly.nodes import Literal
@@ -106,6 +123,32 @@ class Cast(BinaryOp):
         >>> pl.select(Cast(Literal(42), Literal("str")).polars_expr).item()
         '42'
 
+    The positional form above is sugar for the canonical keyword form, and normalizes to it:
+
+        >>> Cast(Literal("3"), Literal("int"))
+        Cast(source=Literal('3'), type=Literal('int'))
+        >>> Cast(source=Literal("3"), type=Literal("int"))
+        Cast(source=Literal('3'), type=Literal('int'))
+
+    By default a cast is strict, so a value that cannot be converted raises:
+
+        >>> pl.select(Cast(Literal("1000 MG"), Literal("float64")).polars_expr)
+        Traceback (most recent call last):
+            ...
+        polars.exceptions.InvalidOperationError: conversion from `str` to `f64` failed ...
+
+    Passing ``strict=Literal(False)`` nulls unconvertible values instead. This is the natural
+    counterpart to non-strict strptime, and is what ``$x::?float64`` parses to:
+
+        >>> lenient = Cast(source=Literal("1000 MG"), type=Literal("float64"), strict=Literal(False))
+        >>> print(pl.select(lenient.polars_expr).item())
+        None
+        >>> df = pl.DataFrame({"dose": ["25", "1000 MG", "", "1.5E-3", "+5", "inf"]})
+        >>> from dftly.nodes import Column
+        >>> node = Cast(source=Column("dose"), type=Literal("float64"), strict=Literal(False))
+        >>> df.select(node.polars_expr)["dose"].to_list()
+        [25.0, None, None, 0.0015, 5.0, inf]
+
     Unsupported types raise an error:
 
         >>> Cast(Literal("3"), Literal("unsupported_type"))
@@ -115,11 +158,21 @@ class Cast(BinaryOp):
 
     A non-evaluatable type argument raises an error:
 
-        >>> from dftly.nodes import Column
         >>> Cast(Literal("3"), Column("x"))
         Traceback (most recent call last):
             ...
-        ValueError: The right node of a Cast operation must evaluate to a string literal.
+        ValueError: The type argument of a Cast operation must evaluate to a string literal.
+
+    Positional form requires exactly two arguments, and cannot be mixed with the keyword form:
+
+        >>> Cast(Literal("3"))
+        Traceback (most recent call last):
+            ...
+        ValueError: cast requires exactly two positional arguments (source, type); got 1
+        >>> Cast(Literal("3"), Literal("int"), source=Literal("4"))
+        Traceback (most recent call last):
+            ...
+        ValueError: cast cannot mix positional and keyword arguments; got positional args with {'source'}
 
     This class can also be used to convert numeric types into duration types by specifying their unit:
 
@@ -146,28 +199,97 @@ class Cast(BinaryOp):
 
         >>> pl.select(Cast(Literal(2023), Literal("year")).polars_expr).item()
         datetime.date(2023, 1, 1)
+
+    Those implicit units do not lower to a polars ``.cast()`` -- they build a value via
+    ``pl.duration()`` / ``pl.date()``, which have no ``strict`` parameter to forward. Rather than
+    silently ignoring the flag, asking for a non-strict conversion to one of them is an error:
+
+        >>> Cast(source=Literal(3), type=Literal("minutes"), strict=Literal(False))
+        Traceback (most recent call last):
+            ...
+        ValueError: Non-strict casting is not supported for unit 'minutes'; `strict` applies only to
+        dtype casts...
+
+    A non-boolean ``strict`` value raises an error:
+
+        >>> Cast(source=Literal("3"), type=Literal("int"), strict=Literal("yes"))
+        Traceback (most recent call last):
+            ...
+        ValueError: The strict argument must be a boolean, ...
     """
 
     KEY = "cast"
     SYM = "::"
+    REQUIRED_KWARGS = {"source", "type"}
+    OPTIONAL_KWARGS = {"strict"}
 
     def __post_init__(self):
+        # `Cast(source, type)` is positional sugar for the canonical keyword form; normalize it
+        # before the KwargsOnlyFn validators run (they reject positional args outright).
+        if self.args:
+            if self.kwargs:
+                raise ValueError(
+                    f"{self.KEY} cannot mix positional and keyword arguments; got positional args "
+                    f"with {set(self.kwargs)}"
+                )
+            if len(self.args) != 2:
+                raise ValueError(
+                    f"{self.KEY} requires exactly two positional arguments (source, type); "
+                    f"got {len(self.args)}"
+                )
+            source, output_type = self.args
+            self.args = ()
+            self.kwargs = {"source": source, "type": output_type}
+
         super().__post_init__()
+
         if self.output_type not in TYPES:
             raise ValueError(f"Unsupported type: {self.output_type}")
 
+        if not self.strict and not self._lowers_to_cast:
+            raise ValueError(
+                f"Non-strict casting is not supported for unit {self.output_type!r}; `strict` "
+                "applies only to dtype casts. This unit is built with pl.duration()/pl.date(), "
+                "which have no `strict` parameter to forward."
+            )
+
     @property
     def input(self) -> NodeBase:
-        return self.args[0]
+        return self.kwargs["source"]
 
     @property
     def output_type(self) -> str:
         try:
-            return pl.select(self.args[1].polars_expr).item()
+            return pl.select(self.kwargs["type"].polars_expr).item()
         except Exception as e:
             raise ValueError(
-                "The right node of a Cast operation must evaluate to a string literal."
+                "The type argument of a Cast operation must evaluate to a string literal."
             ) from e
+
+    @property
+    def _lowers_to_cast(self) -> bool:
+        """Whether this node compiles to a real ``.cast()`` (rather than an implicit unit builder)."""
+        return (
+            self.output_type not in IMPLICIT_DURATION_TYPES
+            and self.output_type not in IMPLICIT_DATE_TYPES
+        )
+
+    @property
+    def strict(self) -> bool:
+        strict_node = self.kwargs.get("strict", None)
+        if strict_node is None:
+            return True  # default: strict=True, matching polars
+        if not isinstance(strict_node, NodeBase):
+            raise ValueError(
+                "The strict argument must be a NodeBase instance that evaluates to a boolean."
+            )
+        try:
+            val = pl.select(strict_node.polars_expr).item()
+        except Exception as e:
+            raise ValueError("The strict argument must evaluate to a boolean.") from e
+        if not isinstance(val, bool):
+            raise ValueError(f"The strict argument must be a boolean, got {type(val)}")
+        return val
 
     @property
     def polars_expr(self) -> pl.Expr:
@@ -176,4 +298,17 @@ class Cast(BinaryOp):
         elif self.output_type in IMPLICIT_DATE_TYPES:
             return IMPLICIT_DATE_TYPES[self.output_type](self.input.polars_expr)
         else:
-            return self.input.polars_expr.cast(TYPES[self.output_type])
+            return self.input.polars_expr.cast(
+                TYPES[self.output_type], strict=self.strict
+            )
+
+    @classmethod
+    def from_lark(cls, items: list[Any]) -> dict[str, Any]:
+        """Build the canonical keyword base form from the grammar's ``[source, type]`` pair.
+
+        Examples:
+            >>> Cast.from_lark([{"column": "dose"}, {"literal": "float64"}])
+            {'cast': {'source': {'column': 'dose'}, 'type': {'literal': 'float64'}}}
+        """
+        source, output_type = items
+        return {cls.KEY: {"source": source, "type": output_type}}

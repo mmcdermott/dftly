@@ -743,7 +743,8 @@ class Substring(KwargsOnlyFn):
         >>> DftlyGrammar.parse_str("$code[10:30:45]")
         Traceback (most recent call last):
             ...
-        lark.exceptions.VisitError: ... Slice shorthand does not support step ...
+        ValueError: Failed to parse expression '$code[10:30:45]': Slice shorthand does not support
+        step (got '10:30:45'); use the substring() function form.
 
     End-to-end: the MIMIC ICD dot-insertion pattern (``add_dot($code, 3)``) combines
     :class:`LenChars` and :class:`Substring` to produce a declarative equivalent of the
