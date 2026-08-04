@@ -16,6 +16,11 @@ jobs:
 
     timeout-minutes: 30
 
+    # Lifted out of `secrets` so the Codecov steps can gate on whether it is set: the
+    # `secrets` context is not available in a step-level `if`, only `env` is.
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
     steps:
       - uses: actions/checkout@v7
 
@@ -33,7 +38,11 @@ jobs:
           --cov-report=term
           --junitxml=junit.xml
 
+      # Dependabot and fork PRs run without access to repo secrets, and Codecov rejects
+      # unauthenticated uploads to a protected branch. Skip the upload in that case
+      # rather than let `fail_ci_if_error` redden a run whose tests actually passed.
       - name: Upload coverage to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -42,7 +51,7 @@ jobs:
           verbose: true
 
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

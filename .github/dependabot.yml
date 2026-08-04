@@ -12,8 +12,14 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
-    # "/" covers .github/workflows/* and the composite action in .github/actions/.
-    directory: "/"
+    # "/" only covers .github/workflows/* (plus a repo-root action.yml). Composite
+    # actions in subdirectories are invisible to Dependabot unless their directory is
+    # listed explicitly, so .github/actions/setup is named here -- otherwise it silently
+    # drifts behind the workflows. See dependabot/dependabot-core#6704.
+    # Add a new entry here whenever a composite action is added under .github/actions/.
+    directories:
+      - "/"
+      - "/.github/actions/setup"
     schedule:
       interval: "monthly"
     open-pull-requests-limit: 5
