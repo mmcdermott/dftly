@@ -1,35 +1,24 @@
 """Splitting ``f"..."`` patterns into a format string and the expressions that fill it.
 
-The grammar lexes an f-string as one opaque ``STRING`` token, so the field boundaries have to be
-recovered from the text afterwards. That question -- "where does this expression end?" -- is a
-lexing question, and the answer is taken from dftly's own lexer rather than re-derived here: a
-``}`` inside a string literal, a regex literal, or a backtick-quoted column name is *inside a
-token*, so the lexer walks past it, and the first ``}`` it cannot lex is the one that closes the
-field. Nothing in this module needs to know how those forms quote or escape their contents.
+The grammar lexes an f-string as one opaque ``STRING`` token, so field boundaries have to be
+recovered from the text afterwards. That question -- "where does this expression end?" -- is answered
+by handing the text to dftly's own parser and seeing where it stops, rather than by scanning for
+braces here. ``}`` is not a terminal anywhere in the grammar, and a ``}`` belonging to a string
+literal, a regex literal, or a backtick-quoted column name is *inside* a token, so the first ``}``
+the parser cannot consume is exactly the one that closes the field.
+
+It has to be the parser and not a bare lexer. dftly's terminals are ambiguous without parser state --
+``/`` starts a regex literal in one position and divides in another -- so lexing alone reads
+``f"{($a / $a)}{extract /0/ from $x}"`` as holding one regex literal that runs from the division
+slash to the one in ``extract``, swallowing the brace that ends the first field. Lark's contextual
+lexer only offers terminals the parser can accept next, which settles it.
 """
 
 from __future__ import annotations
 
-from functools import cache
-from importlib.resources import files
+from lark.exceptions import UnexpectedCharacters, UnexpectedInput
 
-from lark import Lark
-from lark.exceptions import UnexpectedCharacters
-
-GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
-
-
-@cache
-def _field_lexer() -> Lark:
-    """A lexer-only view of the grammar, used to find where an interpolation field ends.
-
-    Built on first use rather than at import: it costs a grammar compile, and an expression set
-    with no f-strings never needs it. ``parser=None`` skips the LALR table construction, and the
-    basic lexer is used because the contextual one resolves terminals from parser state that does
-    not exist here -- irrelevant either way, since only the *position* at which lexing stops is
-    read, never the tokens.
-    """
-    return Lark(GRAMMAR_TEXT, parser=None, lexer="basic")
+from .grammar import GRAMMAR
 
 
 def _find_field_end(pattern: str, start: int) -> int:
@@ -39,8 +28,8 @@ def _find_field_end(pattern: str, start: int) -> int:
         >>> _find_field_end("{$a} rest", 1)
         3
 
-    Braces that belong to a token rather than to the f-string are skipped, because the lexer
-    consumes the whole token -- this is the entire reason for lexing rather than counting braces:
+    Braces belonging to a token rather than to the f-string are passed over, because the parser
+    consumes the whole token -- this is the entire reason for parsing rather than counting braces:
 
         >>> _find_field_end("{extract /a{2}/ from $x}", 1)   # regex quantifier
         23
@@ -51,27 +40,42 @@ def _find_field_end(pattern: str, start: int) -> int:
         >>> _find_field_end("{$`}`}", 1)                     # brace inside a quoted column name
         5
 
-    A field that is never closed, and a character dftly cannot lex at all, are both errors:
+    Division does not open a regex literal, though the two share a character. Only the parser state
+    distinguishes them, which is why this cannot be a lexer-only scan:
+
+        >>> _find_field_end("{($a / $a)}{extract /0/ from $x}", 1)
+        10
+
+    A field that is never closed, and an expression the grammar rejects outright, are both errors:
 
         >>> _find_field_end("{$a", 1)
         Traceback (most recent call last):
             ...
         ValueError: Unterminated interpolation field starting at position 0 of '{$a'; ...
-        >>> _find_field_end("{$a # 1}", 1)
+        >>> _find_field_end("{$a $b}", 1)
         Traceback (most recent call last):
             ...
-        ValueError: Cannot lex '#' at position 4 of '{$a # 1}'...
+        ValueError: Invalid expression in the interpolation field starting at position 0 of ...
     """
     try:
-        list(_field_lexer().lex(pattern[start:]))
+        for _ in GRAMMAR.parse_interactive(pattern[start:]).iter_parse():
+            pass
     except UnexpectedCharacters as e:
         stop = start + e.pos_in_stream
-        if pattern[stop] != "}":
-            raise ValueError(
-                f"Cannot lex {pattern[stop]!r} at position {stop} of {pattern!r}. Interpolation "
-                "fields hold dftly expressions; literal text belongs outside the `{...}`."
-            ) from e
-        return stop
+        if pattern[stop] == "}":
+            return stop
+        raise ValueError(
+            f"Cannot lex {pattern[stop]!r} at position {stop} of {pattern!r}. Interpolation "
+            "fields hold dftly expressions; literal text belongs outside the `{...}`."
+        ) from e
+    except UnexpectedInput as e:
+        # The parser rejected a token before reaching any `}`, so the field is not a dftly
+        # expression at all. Only the field text can be at fault: whatever follows it begins with
+        # the `}` that the *lexer* refuses, which is the branch above.
+        raise ValueError(
+            f"Invalid expression in the interpolation field starting at position {start - 1} of "
+            f"{pattern!r}: {e}"
+        ) from e
 
     raise ValueError(
         f"Unterminated interpolation field starting at position {start - 1} of {pattern!r}; "

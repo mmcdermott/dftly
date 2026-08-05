@@ -103,7 +103,8 @@ src/dftly/
   str_form/
     grammar.lark        -- LALR(1) grammar for string expressions
     parser.py           -- DftlyGrammar (Lark Transformer: tokens -> base-form dicts)
-    interpolation.py    -- f-string field splitting (boundaries found with the grammar's lexer)
+    grammar.py          -- the compiled Lark grammar, shared by the modules below
+    interpolation.py    -- f-string field splitting (boundaries found by parsing, not brace counting)
 ```
 
 ### Parsing Pipeline

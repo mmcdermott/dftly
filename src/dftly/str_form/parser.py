@@ -5,11 +5,11 @@ from functools import partial
 from dateutil import parser as dt_parser
 
 
-from lark import Lark, Token, Transformer
+from lark import Token, Transformer
 from lark.exceptions import VisitError
 from lark.visitors import Discard
 
-from .interpolation import GRAMMAR_TEXT
+from .grammar import GRAMMAR
 from ..nodes import (
     BINARY_OPS,
     UNARY_OPS,
@@ -19,9 +19,6 @@ from ..nodes import (
     Coalesce,
     Literal,
 )
-
-
-GRAMMAR = Lark(GRAMMAR_TEXT, parser="lalr")
 
 
 class DftlyGrammar(Transformer):
