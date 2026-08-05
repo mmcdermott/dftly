@@ -233,12 +233,15 @@ class RegexExtract(KwargsOnlyFn):
 
     Patterns that are not literal-evaluatable (a pattern built from a column, say) cannot be
     inspected, and patterns that polars' Rust regex engine accepts but Python's ``re`` does not are
-    not rejected here -- both are simply left alone:
+    not rejected here -- both are simply left alone. Nor does the inspection leak diagnostics of its
+    own: ``[a~~b]`` makes Python's ``re`` warn about character-class syntax it may adopt later, which
+    is this module's opinion of a pattern polars will match with a different engine:
 
         >>> with warnings.catch_warnings(record=True) as caught:
         ...     warnings.simplefilter("always")
         ...     node = RegexExtract(pattern=Column("pattern_col"), source=Column("agegroup"))
         ...     node = RegexExtract(pattern=Literal(r"(?P<y>[0-9]{4})-(?<m>[0-9]{2})"), source=Column("d"))
+        ...     node = RegexExtract(pattern=Literal(r"[a~~b]"), source=Column("d"))
         >>> caught
         []
 
@@ -344,13 +347,20 @@ class RegexExtract(KwargsOnlyFn):
         ``group_index`` -- including ``0`` for "the whole match, deliberately" -- is taken at its
         word, and a pattern the local ``re`` module cannot compile is left alone rather than second
         guessed, since polars matches with Rust's regex engine, not this one.
+
+        The probe's own diagnostics are suppressed for the same reason its errors are ignored: they
+        are this module's opinion of a pattern polars will match with a different engine.
+        ``re.compile("[a~~b]")`` warns about set syntax Python may adopt later, which says nothing
+        about whether the extraction is right and must not surface as though dftly had an opinion.
         """
         if "group_index" in self.kwargs:
             return
 
         try:
             pattern = pl.select(self.kwargs["pattern"].polars_expr).item()
-            n_groups = re.compile(pattern).groups
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                n_groups = re.compile(pattern).groups
         except Exception:
             return
 
