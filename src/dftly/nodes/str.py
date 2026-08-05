@@ -2,9 +2,12 @@ from .base import ArgsOnlyFn, Literal, KwargsOnlyFn, NodeBase
 from typing import ClassVar, Any
 import polars as pl
 import re
-import string
 import warnings
 from .types import DATE_TIME_TYPES
+
+# `from_lark` is the string-form bridge, so it is the one place a node reaches back into
+# `str_form`; the module holds only the lexer-driven field splitter and imports no nodes.
+from ..str_form.interpolation import split_interpolation
 
 
 class StringInterpolate(ArgsOnlyFn):
@@ -89,6 +92,30 @@ class StringInterpolate(ArgsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node.
+
+    Each ``{...}`` holds a full dftly expression, taken verbatim -- casts and regex quantifiers
+    included, neither of which survived being split by ``str.format``'s field/format-spec rules:
+
+        >>> from dftly import Parser
+        >>> doses = pl.DataFrame({"dose": [3.7], "icd": ["12345"]})
+        >>> ops = {
+        ...     "rounded": 'f"dose={$dose::int}"',
+        ...     "dotted": r'f"{extract group 1 of /^([0-9]{3})/ from $icd}.{$icd[3:]}"',
+        ... }
+        >>> doses.select(**Parser.to_polars(ops))
+        shape: (1, 2)
+        ┌─────────┬────────┐
+        │ rounded ┆ dotted │
+        │ ---     ┆ ---    │
+        │ str     ┆ str    │
+        ╞═════════╪════════╡
+        │ dose=3  ┆ 123.45 │
+        └─────────┴────────┘
+
+    Literal braces are doubled, as in Python:
+
+        >>> doses.select(**Parser.to_polars({"braced": 'f"{{{$icd}}}"'}))["braced"].to_list()
+        ['{12345}']
     """
 
     KEY = "string_interpolate"
@@ -139,15 +166,7 @@ class StringInterpolate(ArgsOnlyFn):
                     "When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node."
                 )
             pattern = Literal.args_from_value(pattern)[0][0]
-        fields = []
-        fmt_parts = []
-        for literal, field, _, _ in string.Formatter().parse(pattern):
-            fmt_parts.append(literal)
-            if field is not None:
-                fmt_parts.append("{}")
-                fields.append(field)
-
-        pattern = "".join(fmt_parts)
+        pattern, fields = split_interpolation(pattern)
         pattern_lit = {"literal": pattern}
 
         return {cls.KEY: [pattern_lit] + fields}
