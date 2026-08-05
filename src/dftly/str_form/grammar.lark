@@ -85,12 +85,13 @@ FROM.2: /from/i
 
 ?expr: global_cast
 
-// Lowest precedence: global cast with `as`/`@` binds last
-?global_cast: conditional AS NAME   -> cast_expr
-            | conditional AS QUESTION NAME -> cast_expr_nonstrict
-            | conditional AS STRING -> strptime
-            | conditional AS QUESTION STRING -> strptime_nonstrict
-            | conditional AT time_literal   -> binary_expr
+// Lowest precedence: global cast with `as`/`@` binds last.
+// Left-recursive so casts chain (see the `local_cast` note below): `$x as int as year`.
+?global_cast: global_cast AS NAME   -> cast_expr
+            | global_cast AS QUESTION NAME -> cast_expr_nonstrict
+            | global_cast AS STRING -> strptime
+            | global_cast AS QUESTION STRING -> strptime_nonstrict
+            | global_cast AT time_literal   -> binary_expr
             | conditional
 
 ?conditional: expr IF expr (ELSE expr)?   -> conditional
@@ -133,11 +134,18 @@ FROM.2: /from/i
 ?exp_expr: local_cast POWER exp_expr  -> binary_expr
          | local_cast
 
-// Higher precedence: local cast with `::` binds tighter than arithmetic
-?local_cast: unary CAST NAME   -> cast_expr
-           | unary CAST QUESTION NAME -> cast_expr_nonstrict
-           | unary CAST STRING -> strptime
-           | unary CAST QUESTION STRING -> strptime_nonstrict
+// Higher precedence: local cast with `::` binds tighter than arithmetic.
+//
+// Left-recursive, so casts chain and read left to right: `$x::int::year::datetime` is
+// `(($x::int)::year)::datetime`, the same nesting the parenthesized form produces. Each cast
+// applies to everything to its left, so there is no alternative grouping the parens could have
+// been disambiguating -- they were pure ceremony, and (because they nest on the left) appending
+// a step meant re-parenthesizing the whole expression. Chaining is sugar only: every link is
+// still its own `cast` node, so the base form is unchanged.
+?local_cast: local_cast CAST NAME   -> cast_expr
+           | local_cast CAST QUESTION NAME -> cast_expr_nonstrict
+           | local_cast CAST STRING -> strptime
+           | local_cast CAST QUESTION STRING -> strptime_nonstrict
            | unary
 
 ?unary: (NOT_SYM|NOT) unary   -> unary_expr

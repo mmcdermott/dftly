@@ -225,6 +225,35 @@ Every datetime/duration accessor also exists as a function-call form — `dt_hou
 `dt_total_seconds($delta)`, etc. — for use in programmatic construction or when the cast
 form doesn't compose cleanly. The two are always equivalent.
 
+### Chaining casts
+
+Casts chain, and read left to right — each one applies to everything to its left, so
+`$col::int::year::datetime` is `(($col::int)::year)::datetime`. There is no alternative grouping
+parentheses could disambiguate here, so they are not required:
+
+```python
+>>> years = pl.DataFrame({"admissionyeargroup": ["2003-2004", "2010-2011"]})
+>>> ops = r"""
+... admit_year: '(extract /2003|2010/ from $admissionyeargroup)::int::year::datetime'
+... """
+>>> years.select(**Parser.to_polars(ops))
+shape: (2, 1)
+┌─────────────────────┐
+│ admit_year          │
+│ ---                 │
+│ datetime[μs]        │
+╞═════════════════════╡
+│ 2003-01-01 00:00:00 │
+│ 2010-01-01 00:00:00 │
+└─────────────────────┘
+
+```
+
+Chaining is sugar only: each link is still its own `cast` node, so the chained form and the
+parenthesized form produce the identical tree. `as` chains the same way (`$col as int as year`),
+and the two spellings can be mixed — with their usual precedence difference, so a `::` link binds
+tighter than surrounding arithmetic while an `as` link does not.
+
 ### Non-strict conversion with `::?`
 
 Real-world source columns are often "mostly" the type they claim to be — a `VARCHAR` dose column
