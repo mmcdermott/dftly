@@ -278,7 +278,7 @@ and `::?hour_of_day` are errors rather than silent no-ops.
 ...     "whole_match": r"extract /^[0-9]{2}/ from $agegroup",
 ...     "age_lo": r"extract group 1 of /^([0-9]{2})/ from $agegroup",
 ...     "age_hi": r"(extract group 1 of /([0-9]{2}).?$/ from $agegroup)::int",
-...     "span": r'f"{extract group 1 of /^([0-9][0-9])/ from $agegroup} to {extract group 1 of /([0-9][0-9]).?$/ from $agegroup}"',
+...     "span": r'f"{extract group 1 of /^([0-9]{2})/ from $agegroup} to {extract group 1 of /([0-9]{2}).?$/ from $agegroup}"',
 ... }
 >>> bands.select(**Parser.to_polars(regex_ops))
 shape: (2, 4)
@@ -300,6 +300,39 @@ A pattern that *writes* capture groups but never names one is almost always a re
 that would silently return the whole match instead, so that combination warns and points at the
 syntax above. To keep the whole match deliberately, either make the group non-capturing (`(?:...)`)
 or ask for it explicitly with `extract group 0 of /re/ from $col`.
+
+### What goes inside `f"{...}"`
+
+Every `{...}` field holds a full dftly expression, taken verbatim — casts, regex forms with brace
+quantifiers, subscripts, `??`, conditionals:
+
+```python
+>>> interp_df = pl.DataFrame({"dose": [3.7], "icd": ["12345"], "unit": [None]})
+>>> interp_ops = {
+...     "rounded": 'f"dose={$dose::int}"',
+...     "dotted": r'f"{extract group 1 of /^([0-9]{3})/ from $icd}.{$icd[3:]}"',
+...     "guarded": '''f"{$icd}//{$unit ?? 'UNK'}"''',
+...     "braced": 'f"{{{$icd}}}"',
+... }
+>>> interp_df.select(**Parser.to_polars(interp_ops))
+shape: (1, 4)
+┌─────────┬────────┬────────────┬─────────┐
+│ rounded ┆ dotted ┆ guarded    ┆ braced  │
+│ ---     ┆ ---    ┆ ---        ┆ ---     │
+│ str     ┆ str    ┆ str        ┆ str     │
+╞═════════╪════════╪════════════╪═════════╡
+│ dose=3  ┆ 123.45 ┆ 12345//UNK ┆ {12345} │
+└─────────┴────────┴────────────┴─────────┘
+
+```
+
+Braces nest inside a field (so `{2}` quantifiers work) and are ignored inside quoted strings, so
+`f"{$a ?? '}'}"` means what it looks like. Literal braces are doubled, as in Python: `{{` and `}}`.
+
+Python's format-spec and conversion syntax (`{x:>10}`, `{x!r}`) is **not** supported — a `:` or `!`
+inside a field is ordinary dftly syntax, which is what makes `f"{$dose::int}"` a cast rather than a
+field named `$dose` with a `:int` format spec. Unmatched or empty braces are parse errors rather
+than silently reinterpreted text.
 
 ### Position-based string operations
 
