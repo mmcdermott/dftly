@@ -341,6 +341,44 @@ shape: (1, 7)
 
 ```
 
+### Column names that aren't identifiers
+
+`$name` covers column names that look like identifiers. Source tables — especially clinical ones —
+routinely ship columns like `Variable Name` or `Unit`, which `$Variable Name` cannot express. Wrap
+those in backticks:
+
+```python
+>>> wide = pl.DataFrame({
+...     "Variable Name": ["HR", "SpO2"],
+...     "Unit": ["bpm", "%"],
+...     "Value 1": [80, 97],
+... })
+>>> quoted_ops = {
+...     "code": 'f"OBS//{$`Variable Name`}//{$`Unit`}"',
+...     "numeric_value": "$`Value 1`::float",
+... }
+>>> wide.select(**Parser.to_polars(quoted_ops))
+shape: (2, 2)
+┌──────────────┬───────────────┐
+│ code         ┆ numeric_value │
+│ ---          ┆ ---           │
+│ str          ┆ f32           │
+╞══════════════╪═══════════════╡
+│ OBS//HR//bpm ┆ 80.0          │
+│ OBS//SpO2//% ┆ 97.0          │
+└──────────────┴───────────────┘
+
+```
+
+This is a quoted spelling of the same `column` node, not a different one, so `` $`a` `` and `$a` are
+interchangeable and the quoted form composes everywhere a column reference can appear — arithmetic,
+casts, regex sources, `f"{...}"` fields.
+
+There is no escape for a literal backtick inside a quoted name, and an empty quoted name (a `$`
+followed by two backticks) is a parse error rather than a reference to a column called `""`. A column
+whose name contains a backtick is still reachable through the dict form, `{column: "..."}`, which has
+no lexer to escape from.
+
 ### Bare words as string literals
 
 When dftly expressions are embedded in YAML config files, string literals normally require awkward
