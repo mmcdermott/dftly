@@ -7,6 +7,23 @@ from .base import ArgsOnlyFn, BinaryOp, UnaryOp
 import polars as pl
 
 
+def _hash_null_safe(source: pl.Expr, hashed: pl.Expr) -> pl.Expr:
+    """Return ``hashed``, except where ``source`` is null -- there, null.
+
+    Polars' ``.hash()`` is total: it maps null to a fixed, valid-looking integer, because it exists
+    to drive ``group_by``/``join``, where every value must land in some bucket. dftly's ``hash`` is a
+    user-facing derivation function with the opposite contract -- no key, no derived id -- so the
+    total behaviour has to be masked off. Without the mask every null-keyed row receives the *same*
+    non-null id, silently merging unrelated rows into one fabricated entity that no downstream null
+    check can catch, since the column contains no nulls at all.
+
+    The guard keys off the argument *expression*, not the columns beneath it, so a caller who wants
+    a value for missing keys says so explicitly and keeps it: ``hash(coalesce($mrn, "MISSING"))``
+    hashes the fallback.
+    """
+    return pl.when(source.is_null()).then(None).otherwise(hashed)
+
+
 class Hash(ArgsOnlyFn):
     """This non-terminal node computes a hash of the input expression.
 
@@ -25,6 +42,30 @@ class Hash(ArgsOnlyFn):
         True
         >>> pl.select(Hash(Literal("hello")).polars_expr).item() != pl.select(Hash(Literal("world")).polars_expr).item()
         True
+
+    Hashing is null-in, null-out. Polars' ``.hash()`` is total -- it maps null to a fixed integer,
+    because it exists to drive ``group_by``/``join``, where every value needs a bucket -- but a
+    derived id for a row that has no key is a fabrication, and one shared by every such row:
+
+        >>> from dftly.nodes import Column
+        >>> df = pl.DataFrame({"mrn": ["a", "b", None, None, "a"]})
+        >>> ids = df.select(Hash(Column("mrn")).polars_expr).to_series().to_list()
+        >>> ids[2] is None and ids[3] is None
+        True
+        >>> ids[0] == ids[4] and ids[0] != ids[1]     # real keys hash as before
+        True
+        >>> df.select(Hash(Column("mrn")).polars_expr).dtypes
+        [UInt64]
+
+    That leaves the nulls visible to any downstream check, rather than merging every keyless row
+    onto one phantom entity with a schema-valid id. To derive an id for missing keys anyway, supply
+    the fallback explicitly -- the guard reads the argument expression, so a non-null argument is
+    hashed no matter where the value came from:
+
+        >>> from dftly import Parser
+        >>> filled = df.select(**Parser.to_polars({"id": 'hash(coalesce($mrn, "MISSING"))'}))
+        >>> filled["id"].null_count()
+        0
 
     Only one argument is accepted:
 
@@ -59,7 +100,8 @@ class Hash(ArgsOnlyFn):
 
     @property
     def polars_expr(self) -> pl.Expr:
-        return self.args[0].polars_expr.hash()
+        arg = self.args[0].polars_expr
+        return _hash_null_safe(arg, arg.hash())
 
 
 class SignedHash(ArgsOnlyFn):
@@ -101,6 +143,21 @@ class SignedHash(ArgsOnlyFn):
         >>> Parser()({"add": [Literal(1), SignedHash(Literal("hello"))]})
         Add(Literal(1), SignedHash(Literal('hello')))
 
+    Nulls propagate, exactly as in :class:`Hash`, and for the same reason -- a missing key must not
+    silently become a valid ``subject_id`` shared by every keyless row:
+
+        >>> nulls = pl.DataFrame({"mrn": ["abc", None]})
+        >>> ids = nulls.select(**Parser.to_polars({"subject_id": "signed_hash($mrn)"}))["subject_id"]
+        >>> isinstance(ids[0], int), ids[1] is None, ids.dtype
+        (True, True, Int64)
+
+    A null surviving to the output is also what lets a fallback further out do its job, rather than
+    finding a fabricated id already in place:
+
+        >>> both = pl.DataFrame({"y": pl.Series([10, None], dtype=pl.Int64), "mrn": ["a", None]})
+        >>> both.select(**Parser.to_polars({"sid": "coalesce($y, signed_hash($mrn))"}))["sid"].to_list()
+        [10, None]
+
     Only one argument is accepted:
 
         >>> SignedHash(Literal("a"), Literal("b"))
@@ -134,7 +191,8 @@ class SignedHash(ArgsOnlyFn):
 
     @property
     def polars_expr(self) -> pl.Expr:
-        return self.args[0].polars_expr.hash().reinterpret(signed=True)
+        arg = self.args[0].polars_expr
+        return _hash_null_safe(arg, arg.hash().reinterpret(signed=True))
 
 
 class Not(UnaryOp):
