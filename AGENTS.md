@@ -103,6 +103,7 @@ src/dftly/
   str_form/
     grammar.lark        -- LALR(1) grammar for string expressions
     parser.py           -- DftlyGrammar (Lark Transformer: tokens -> base-form dicts)
+    interpolation.py    -- f-string field splitting (boundaries found with the grammar's lexer)
 ```
 
 ### Parsing Pipeline
@@ -244,13 +245,14 @@ pre-commit run --all-files
 
 ## Important Files
 
-| File                              | Purpose                                                |
-| --------------------------------- | ------------------------------------------------------ |
-| `src/dftly/__init__.py`           | Public API exports                                     |
-| `src/dftly/parser.py`             | Parser class and YAML/dict entry points                |
-| `src/dftly/nodes/base.py`         | NodeBase hierarchy and terminal nodes                  |
-| `src/dftly/nodes/__init__.py`     | Node registration (`NODES`, `BINARY_OPS`, `UNARY_OPS`) |
-| `src/dftly/str_form/grammar.lark` | LALR(1) expression grammar                             |
-| `src/dftly/str_form/parser.py`    | `DftlyGrammar` Lark transformer                        |
-| `conftest.py`                     | Doctest namespace fixtures                             |
-| `pyproject.toml`                  | Project config, test settings, dependencies            |
+| File                                  | Purpose                                                |
+| ------------------------------------- | ------------------------------------------------------ |
+| `src/dftly/__init__.py`               | Public API exports                                     |
+| `src/dftly/parser.py`                 | Parser class and YAML/dict entry points                |
+| `src/dftly/nodes/base.py`             | NodeBase hierarchy and terminal nodes                  |
+| `src/dftly/nodes/__init__.py`         | Node registration (`NODES`, `BINARY_OPS`, `UNARY_OPS`) |
+| `src/dftly/str_form/grammar.lark`     | LALR(1) expression grammar                             |
+| `src/dftly/str_form/parser.py`        | `DftlyGrammar` Lark transformer                        |
+| `src/dftly/str_form/interpolation.py` | f-string field splitting via the grammar's lexer       |
+| `conftest.py`                         | Doctest namespace fixtures                             |
+| `pyproject.toml`                      | Project config, test settings, dependencies            |

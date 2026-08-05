@@ -5,122 +5,9 @@ import re
 import warnings
 from .types import DATE_TIME_TYPES
 
-
-def _scan_interpolation_field(pattern: str, start: int) -> tuple[str, int]:
-    """Return the text of the field beginning at ``start`` and the index just past its ``}``.
-
-    ``start`` is the index of the first character *inside* the opening brace. Braces nest and are
-    ignored inside quoted strings, so a field can contain both a regex quantifier and a string
-    literal holding a brace:
-
-        >>> _scan_interpolation_field("{extract /([0-9]{2})/ from $x} rest", 1)
-        ('extract /([0-9]{2})/ from $x', 30)
-        >>> _scan_interpolation_field("{$a ?? '}'}", 1)
-        ("$a ?? '}'", 11)
-
-    An unterminated field is an error rather than a silently truncated expression:
-
-        >>> _scan_interpolation_field("{$a", 1)
-        Traceback (most recent call last):
-            ...
-        ValueError: Unterminated interpolation field starting at position 0 of '{$a'; ...
-    """
-    depth = 0
-    quote = None
-    i = start
-
-    while i < len(pattern):
-        char = pattern[i]
-        if quote is not None:
-            # Mirrors the STRING terminal in grammar.lark, where a backslash escapes any character.
-            if char == "\\":
-                i += 2
-                continue
-            if char == quote:
-                quote = None
-        elif char in "'\"":
-            quote = char
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            if depth == 0:
-                return pattern[start:i], i + 1
-            depth -= 1
-        i += 1
-
-    raise ValueError(
-        f"Unterminated interpolation field starting at position {start - 1} of {pattern!r}; "
-        "every `{` must be closed by a matching `}`, or doubled (`{{`) for a literal brace."
-    )
-
-
-def _split_interpolation(pattern: str) -> tuple[str, list[str]]:
-    """Split an f-string pattern into a ``pl.format`` pattern and its field expressions.
-
-    Each ``{...}`` becomes a ``{}`` placeholder and contributes its contents, verbatim, as a field
-    to be parsed as a full dftly expression. ``{{`` and ``}}`` are literal braces, as in Python.
-
-        >>> _split_interpolation("hello {$name}")
-        ('hello {}', ['$name'])
-        >>> _split_interpolation("{{literal}} {$a} and {$b}")
-        ('{literal} {} and {}', ['$a', '$b'])
-
-    The contents are *not* split on ``:`` or ``!`` the way ``str.format`` would split a field from
-    its format spec and conversion. Those characters are ordinary dftly syntax -- ``::`` is a cast --
-    and reading them as formatting directives silently dropped half the expression:
-
-        >>> _split_interpolation("{$a::int}")
-        ('{}', ['$a::int'])
-        >>> _split_interpolation("{$dose::?float64} {$code[0:3]}")
-        ('{} {}', ['$dose::?float64', '$code[0:3]'])
-
-    A lone closing brace, and an empty field, are both errors:
-
-        >>> _split_interpolation("a } b")
-        Traceback (most recent call last):
-            ...
-        ValueError: Unmatched `}` at position 2 of 'a } b'; write `}}` for a literal brace.
-        >>> _split_interpolation("a {} b")
-        Traceback (most recent call last):
-            ...
-        ValueError: Empty interpolation field at position 2 of 'a {} b'; ...
-    """
-    out: list[str] = []
-    fields: list[str] = []
-    i = 0
-
-    while i < len(pattern):
-        char = pattern[i]
-
-        if char == "{":
-            if pattern.startswith("{{", i):
-                out.append("{")
-                i += 2
-                continue
-
-            field, i = _scan_interpolation_field(pattern, i + 1)
-            if not field.strip():
-                raise ValueError(
-                    f"Empty interpolation field at position {i - len(field) - 2} of {pattern!r}; "
-                    "each `{...}` must hold a dftly expression."
-                )
-            fields.append(field)
-            out.append("{}")
-            continue
-
-        if char == "}":
-            if pattern.startswith("}}", i):
-                out.append("}")
-                i += 2
-                continue
-            raise ValueError(
-                f"Unmatched `}}` at position {i} of {pattern!r}; write `}}}}` for a literal brace."
-            )
-
-        out.append(char)
-        i += 1
-
-    return "".join(out), fields
+# `from_lark` is the string-form bridge, so it is the one place a node reaches back into
+# `str_form`; the module holds only the lexer-driven field splitter and imports no nodes.
+from ..str_form.interpolation import split_interpolation
 
 
 class StringInterpolate(ArgsOnlyFn):
@@ -279,7 +166,7 @@ class StringInterpolate(ArgsOnlyFn):
                     "When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node."
                 )
             pattern = Literal.args_from_value(pattern)[0][0]
-        pattern, fields = _split_interpolation(pattern)
+        pattern, fields = split_interpolation(pattern)
         pattern_lit = {"literal": pattern}
 
         return {cls.KEY: [pattern_lit] + fields}

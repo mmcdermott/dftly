@@ -5,11 +5,11 @@ from functools import partial
 from dateutil import parser as dt_parser
 
 
-from importlib.resources import files
 from lark import Lark, Token, Transformer
 from lark.exceptions import VisitError
 from lark.visitors import Discard
 
+from .interpolation import GRAMMAR_TEXT
 from ..nodes import (
     BINARY_OPS,
     UNARY_OPS,
@@ -21,7 +21,6 @@ from ..nodes import (
 )
 
 
-GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
 GRAMMAR = Lark(GRAMMAR_TEXT, parser="lalr")
 
 
