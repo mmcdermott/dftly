@@ -71,6 +71,7 @@ AND.2: "and"i
 OR.2: "or"i
 NOT.2: "not"i
 NAME: /[A-Za-z_][A-Za-z0-9_]*/
+BACKTICK_NAME: /`[^`\n]+`/
 IN: /in/i
 REGEX_LITERAL: /\/([^\/\\\n]|\\.)*\//
 LPAR: "("
@@ -197,9 +198,16 @@ FROM.2: /from/i
 ?regex: EXTRACT (GROUP INT OF)? REGEX_LITERAL FROM additive -> regex_extract
       | REGEX_LITERAL IN additive -> regex_match
 
+// `$`Variable Name`` is the quoted spelling of `$name`, for columns whose names are not
+// identifiers (spaces, punctuation, leading digits -- anything `NAME` cannot match). Both
+// alternatives reduce with the same `column` handler, so the two spellings are one node: the
+// backticks are stripped by the `BACKTICK_NAME` terminal transform, exactly as quotes are for
+// `STRING`. There is deliberately no escape for a literal backtick inside the name; such a
+// column is reachable through the dict form (`{column: "..."}`), which has no lexer at all.
 ?primary: regex
         | call_expr
         | (DOLLAR)NAME -> column
+        | (DOLLAR)BACKTICK_NAME -> column
         | (FORMAT_PFX)STRING -> string_interpolate
         | time_literal
         | DATE

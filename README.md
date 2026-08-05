@@ -168,9 +168,10 @@ Every other component name (`month_of_year`, `day_of_month`, etc.) follows the s
 Duration values project to numeric totals via `total_<unit>` cast names (`total_seconds`,
 `total_minutes`, `total_hours`, `total_days`, `total_milliseconds`, `total_microseconds`,
 `total_nanoseconds`). This is the dual to the existing `::days` / `::seconds` construction —
-numeric to Duration goes through plural unit names, Duration to numeric goes through
-`total_`-prefixed ones. Combined with datetime subtraction, this covers most time-derived
-feature engineering in one line:
+numeric to Duration goes through plural unit names (`nanoseconds`, `microseconds`, `milliseconds`,
+`seconds`, `minutes`, `hours`, `days`, `weeks`, `months`, `years`), Duration to numeric goes through
+`total_`-prefixed ones, and every unit is available in both directions. Combined with datetime
+subtraction, this covers most time-derived feature engineering in one line:
 
 ```python
 >>> ops = r"""
@@ -188,6 +189,28 @@ shape: (2, 3)
 │ 0                ┆ 0                 ┆ 10.001369 │
 │ 531              ┆ 12744             ┆ 8.54757   │
 └──────────────────┴───────────────────┴───────────┘
+
+```
+
+Sub-second units matter most when a source table records offsets in them. An offset column
+documented as milliseconds can say so directly, rather than being divided into a coarser unit:
+
+```python
+>>> from datetime import datetime
+>>> offsets = pl.DataFrame({
+...     "origin": [datetime(2020, 1, 1), datetime(2021, 6, 15)],
+...     "measuredat": [1500, 90000],  # milliseconds since admission
+... })
+>>> offsets.select(**Parser.to_polars({"measured_time": "$origin + $measuredat::milliseconds"}))
+shape: (2, 1)
+┌─────────────────────────┐
+│ measured_time           │
+│ ---                     │
+│ datetime[μs]            │
+╞═════════════════════════╡
+│ 2020-01-01 00:00:01.500 │
+│ 2021-06-15 00:01:30     │
+└─────────────────────────┘
 
 ```
 
@@ -272,6 +295,40 @@ The `?` prefix applies only to real dtype casts. The duration/date unit casts (`
 `::year`) build values with `pl.duration()`/`pl.date()`, and the datetime accessors
 (`::hour_of_day`) extract a component — none of these have a strictness to relax, so `::?minutes`
 and `::?hour_of_day` are errors rather than silent no-ops.
+
+### Regex extraction and capture groups
+
+`extract /re/ from $col` returns the **whole match**. To pull out a capture group, name it with
+`extract group N of /re/ from $col` — the same node, with `group_index` set:
+
+```python
+>>> bands = pl.DataFrame({"agegroup": ["40-49", "80+"]})
+>>> regex_ops = {
+...     "whole_match": r"extract /^[0-9]{2}/ from $agegroup",
+...     "age_lo": r"extract group 1 of /^([0-9]{2})/ from $agegroup",
+...     "age_hi": r"(extract group 1 of /([0-9]{2}).?$/ from $agegroup)::int",
+...     "span": r'f"{extract group 1 of /^([0-9][0-9])/ from $agegroup} to {extract group 1 of /([0-9][0-9]).?$/ from $agegroup}"',
+... }
+>>> bands.select(**Parser.to_polars(regex_ops))
+shape: (2, 4)
+┌─────────────┬────────┬────────┬──────────┐
+│ whole_match ┆ age_lo ┆ age_hi ┆ span     │
+│ ---         ┆ ---    ┆ ---    ┆ ---      │
+│ str         ┆ str    ┆ i32    ┆ str      │
+╞═════════════╪════════╪════════╪══════════╡
+│ 40          ┆ 40     ┆ 49     ┆ 40 to 49 │
+│ 80          ┆ 80     ┆ 80     ┆ 80 to 80 │
+└─────────────┴────────┴────────┴──────────┘
+
+```
+
+Because it is an ordinary expression, the group form chains with `::` and nests inside `f"{...}"`
+just like everything else — no need to break out into an intermediate column.
+
+A pattern that *writes* capture groups but never names one is almost always a request for group 1
+that would silently return the whole match instead, so that combination warns and points at the
+syntax above. To keep the whole match deliberately, either make the group non-capturing (`(?:...)`)
+or ask for it explicitly with `extract group 0 of /re/ from $col`.
 
 ### Position-based string operations
 
@@ -369,6 +426,44 @@ shape: (1, 7)
 └───────┴─────┴───────┴──────┴──────────┴────────────┴─────────────────────┘
 
 ```
+
+### Column names that aren't identifiers
+
+`$name` covers column names that look like identifiers. Source tables — especially clinical ones —
+routinely ship columns like `Variable Name` or `Unit`, which `$Variable Name` cannot express. Wrap
+those in backticks:
+
+```python
+>>> wide = pl.DataFrame({
+...     "Variable Name": ["HR", "SpO2"],
+...     "Unit": ["bpm", "%"],
+...     "Value 1": [80, 97],
+... })
+>>> quoted_ops = {
+...     "code": 'f"OBS//{$`Variable Name`}//{$`Unit`}"',
+...     "numeric_value": "$`Value 1`::float",
+... }
+>>> wide.select(**Parser.to_polars(quoted_ops))
+shape: (2, 2)
+┌──────────────┬───────────────┐
+│ code         ┆ numeric_value │
+│ ---          ┆ ---           │
+│ str          ┆ f32           │
+╞══════════════╪═══════════════╡
+│ OBS//HR//bpm ┆ 80.0          │
+│ OBS//SpO2//% ┆ 97.0          │
+└──────────────┴───────────────┘
+
+```
+
+This is a quoted spelling of the same `column` node, not a different one, so `` $`a` `` and `$a` are
+interchangeable and the quoted form composes everywhere a column reference can appear — arithmetic,
+casts, regex sources, `f"{...}"` fields.
+
+There is no escape for a literal backtick inside a quoted name, and an empty quoted name (a `$`
+followed by two backticks) is a parse error rather than a reference to a column called `""`. A column
+whose name contains a backtick is still reachable through the dict form, `{column: "..."}`, which has
+no lexer to escape from.
 
 ### Bare words as string literals
 

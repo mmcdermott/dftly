@@ -72,6 +72,35 @@ class DftlyGrammar(Transformer):
         >>> DftlyGrammar.parse_str("$a + $b * 3")
         {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, {'literal': 3}]}]}
 
+    Column names that are not identifiers -- spaces, punctuation, a leading digit -- are written
+    with backticks between the ``$`` and the name. This is the same node, just a quoted spelling of
+    it, so the two forms are interchangeable and a backtick-quoted identifier means what it says:
+
+        >>> DftlyGrammar.parse_str("$`Variable Name`")
+        {'column': 'Variable Name'}
+        >>> DftlyGrammar.parse_str("$`a`") == DftlyGrammar.parse_str("$a")
+        True
+
+    It composes like any other column reference -- in arithmetic, under casts, and inside
+    ``f"{...}"`` interpolation:
+
+        >>> DftlyGrammar.parse_str("$`Variable Name`::float + 1")
+        {'add': [{'cast': {'source': {'column': 'Variable Name'},
+                           'type': {'literal': 'float'}}}, {'literal': 1}]}
+        >>> DftlyGrammar.parse_str('f"OBS//{$`Variable Name`}"')
+        {'string_interpolate': [{'literal': 'OBS//{}'}, '$`Variable Name`']}
+
+    There is no escape for a literal backtick inside a quoted name, and an empty name is a parse
+    error rather than a reference to a column called ``""``:
+
+        >>> DftlyGrammar.parse_str("$``")
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to parse expression '$``': No terminal matches '`' ...
+
+    Such a column is still reachable through the dict form (``{"column": "..."}``), which has no
+    lexer to escape from.
+
     Strings will be parsed into string nodes:
 
         >>> DftlyGrammar.parse_str("'hello' + ' ' + 'world'")
@@ -320,6 +349,11 @@ class DftlyGrammar(Transformer):
 
     def NAME(self, val: Token) -> str:
         return str(val)
+
+    def BACKTICK_NAME(self, val: Token) -> str:
+        # `$`Variable Name`` reduces through the same `column` rule as `$name`; strip the
+        # delimiters here so both spellings hand the handler a bare column name.
+        return str(val)[1:-1]
 
     def args(self, items: list[Any]) -> list[Any]:
         return items
