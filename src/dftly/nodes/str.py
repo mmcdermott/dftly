@@ -1,8 +1,13 @@
 from .base import ArgsOnlyFn, Literal, KwargsOnlyFn, NodeBase
 from typing import ClassVar, Any
 import polars as pl
-import string
+import re
+import warnings
 from .types import DATE_TIME_TYPES
+
+# `from_lark` is the string-form bridge, so it is the one place a node reaches back into
+# `str_form`; the module holds only the lexer-driven field splitter and imports no nodes.
+from ..str_form.interpolation import split_interpolation
 
 
 class StringInterpolate(ArgsOnlyFn):
@@ -87,6 +92,30 @@ class StringInterpolate(ArgsOnlyFn):
         Traceback (most recent call last):
             ...
         ValueError: When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node.
+
+    Each ``{...}`` holds a full dftly expression, taken verbatim -- casts and regex quantifiers
+    included, neither of which survived being split by ``str.format``'s field/format-spec rules:
+
+        >>> from dftly import Parser
+        >>> doses = pl.DataFrame({"dose": [3.7], "icd": ["12345"]})
+        >>> ops = {
+        ...     "rounded": 'f"dose={$dose::int}"',
+        ...     "dotted": r'f"{extract group 1 of /^([0-9]{3})/ from $icd}.{$icd[3:]}"',
+        ... }
+        >>> doses.select(**Parser.to_polars(ops))
+        shape: (1, 2)
+        ┌─────────┬────────┐
+        │ rounded ┆ dotted │
+        │ ---     ┆ ---    │
+        │ str     ┆ str    │
+        ╞═════════╪════════╡
+        │ dose=3  ┆ 123.45 │
+        └─────────┴────────┘
+
+    Literal braces are doubled, as in Python:
+
+        >>> doses.select(**Parser.to_polars({"braced": 'f"{{{$icd}}}"'}))["braced"].to_list()
+        ['{12345}']
     """
 
     KEY = "string_interpolate"
@@ -137,15 +166,7 @@ class StringInterpolate(ArgsOnlyFn):
                     "When using `from_lark` with a dictionary, the dictionary must resolve to a Literal node."
                 )
             pattern = Literal.args_from_value(pattern)[0][0]
-        fields = []
-        fmt_parts = []
-        for literal, field, _, _ in string.Formatter().parse(pattern):
-            fmt_parts.append(literal)
-            if field is not None:
-                fmt_parts.append("{}")
-                fields.append(field)
-
-        pattern = "".join(fmt_parts)
+        pattern, fields = split_interpolation(pattern)
         pattern_lit = {"literal": pattern}
 
         return {cls.KEY: [pattern_lit] + fields}
@@ -161,7 +182,7 @@ class RegexExtract(KwargsOnlyFn):
     This node only accepts keyword arguments, and requires "pattern" and "source" keys, with an optional
     "group_index" key. The "pattern" key is the regex pattern to extract, the "source" key is the target node to
     extract from, and the "group_index" key is the index of the regex group to extract. If not provided, the
-    entire match is extracted.
+    entire match is extracted. In string form, the group is selected with ``extract group N of /re/ from ...``.
 
     The group_index, if provided, must be or evaluate (outside of a polars context) to a non-negative integer.
 
@@ -179,7 +200,8 @@ class RegexExtract(KwargsOnlyFn):
         │ baz456qux │
         └───────────┘
         >>> pattern = Literal(r"([a-z]+)([0-9]+)([a-z]+)")
-        >>> df.select(RegexExtract(pattern=pattern, source=Column("text")).polars_expr)
+        >>> whole = Literal(0)
+        >>> df.select(RegexExtract(pattern=pattern, source=Column("text"), group_index=whole).polars_expr)
         shape: (2, 1)
         ┌───────────┐
         │ text      │
@@ -200,6 +222,47 @@ class RegexExtract(KwargsOnlyFn):
         │ foo  │
         │ baz  │
         └──────┘
+
+    ``group_index`` defaults to 0, the whole match. That default is silent when the pattern has no
+    capture groups, but a pattern that *writes* groups and then does not name one is almost always a
+    request for group 1 that will quietly return the whole match instead -- so that combination warns,
+    naming the syntax that selects a group:
+
+        >>> import warnings
+        >>> with warnings.catch_warnings(record=True) as caught:
+        ...     warnings.simplefilter("always")
+        ...     node = RegexExtract(pattern=Literal(r"([0-9]{2}).?$"), source=Column("agegroup"))
+        >>> print(caught[0].message)
+        Regex pattern '([0-9]{2}).?$' has 1 capture group but no group_index, so the whole match is
+        returned rather than the group. Use `extract group 1 of /([0-9]{2}).?$/ from ...` (base form:
+        `group_index: {literal: 1}`) to select a group; pass `group_index: {literal: 0}` to ask for
+        the whole match explicitly, or make the group non-capturing -- `(?:...)` -- to silence this.
+
+    Naming a group silences it, and so does asking for the whole match explicitly (which is what the
+    ``group_index=Literal(0)`` example above does) or making the group non-capturing:
+
+        >>> with warnings.catch_warnings(record=True) as caught:
+        ...     warnings.simplefilter("always")
+        ...     node = RegexExtract(pattern=Literal(r"([0-9]{2}).?$"), source=Column("agegroup"),
+        ...                         group_index=Literal(1))
+        ...     node = RegexExtract(pattern=Literal(r"(?:[0-9]{2}).?$"), source=Column("agegroup"))
+        ...     node = RegexExtract(pattern=Literal(r"[0-9]{2}.?$"), source=Column("agegroup"))
+        >>> caught
+        []
+
+    Patterns that are not literal-evaluatable (a pattern built from a column, say) cannot be
+    inspected, and patterns that polars' Rust regex engine accepts but Python's ``re`` does not are
+    not rejected here -- both are simply left alone. Nor does the inspection leak diagnostics of its
+    own: ``[a~~b]`` makes Python's ``re`` warn about character-class syntax it may adopt later, which
+    is this module's opinion of a pattern polars will match with a different engine:
+
+        >>> with warnings.catch_warnings(record=True) as caught:
+        ...     warnings.simplefilter("always")
+        ...     node = RegexExtract(pattern=Column("pattern_col"), source=Column("agegroup"))
+        ...     node = RegexExtract(pattern=Literal(r"(?P<y>[0-9]{4})-(?<m>[0-9]{2})"), source=Column("d"))
+        ...     node = RegexExtract(pattern=Literal(r"[a~~b]"), source=Column("d"))
+        >>> caught
+        []
 
     A negative group index raises an error:
 
@@ -291,6 +354,47 @@ class RegexExtract(KwargsOnlyFn):
             )
         if self.group_index < 0:
             raise ValueError("The group_index argument must be a non-negative integer.")
+
+        self._warn_on_unnamed_capture_groups()
+
+    def _warn_on_unnamed_capture_groups(self) -> None:
+        """Warn when the pattern writes capture groups but no ``group_index`` names one.
+
+        The whole-match default is only surprising in that one combination: the author went to the
+        trouble of parenthesizing part of the pattern and then got the unparenthesized result back,
+        with nothing pointing at the syntax that would have selected the group. Any explicit
+        ``group_index`` -- including ``0`` for "the whole match, deliberately" -- is taken at its
+        word, and a pattern the local ``re`` module cannot compile is left alone rather than second
+        guessed, since polars matches with Rust's regex engine, not this one.
+
+        The probe's own diagnostics are suppressed for the same reason its errors are ignored: they
+        are this module's opinion of a pattern polars will match with a different engine.
+        ``re.compile("[a~~b]")`` warns about set syntax Python may adopt later, which says nothing
+        about whether the extraction is right and must not surface as though dftly had an opinion.
+        """
+        if "group_index" in self.kwargs:
+            return
+
+        try:
+            pattern = pl.select(self.kwargs["pattern"].polars_expr).item()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                n_groups = re.compile(pattern).groups
+        except Exception:
+            return
+
+        if not n_groups:
+            return
+
+        warnings.warn(
+            f"Regex pattern {pattern!r} has {n_groups} capture "
+            f"{'group' if n_groups == 1 else 'groups'} but no group_index, so the whole match is "
+            "returned rather than the group. Use "
+            f"`extract group 1 of /{pattern}/ from ...` (base form: `group_index: {{literal: 1}}`) "
+            "to select a group; pass `group_index: {literal: 0}` to ask for the whole match "
+            "explicitly, or make the group non-capturing -- `(?:...)` -- to silence this.",
+            stacklevel=2,
+        )
 
     @property
     def group_index(self) -> int:

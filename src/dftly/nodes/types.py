@@ -51,6 +51,9 @@ SECONDS_PER_YEAR = 365.25 * SECONDS_PER_DAY
 SECONDS_PER_MONTH = SECONDS_PER_YEAR / 12
 
 IMPLICIT_DURATION_TYPES: dict[str, Callable[[pl.Expr], pl.Expr]] = {
+    "nanoseconds": lambda x: pl.duration(nanoseconds=x),
+    "microseconds": lambda x: pl.duration(microseconds=x),
+    "milliseconds": lambda x: pl.duration(milliseconds=x),
     "seconds": lambda x: pl.duration(seconds=x),
     "minutes": lambda x: pl.duration(minutes=x),
     "hours": lambda x: pl.duration(hours=x),
@@ -82,8 +85,11 @@ class Cast(KwargsOnlyFn):
     "str" for "Utf8").
 
     In addition, some custom types are added which resolve to standard polars types through a more complex
-    mapping; in particular, duration units ("seconds", "minutes", "hours", "days", "weeks", "months", "years")
-    convert numeric values into durations, and "year" converts an integer into a date at the start of that year.
+    mapping; in particular, duration units ("nanoseconds", "microseconds", "milliseconds", "seconds",
+    "minutes", "hours", "days", "weeks", "months", "years") convert numeric values into durations, and "year"
+    converts an integer into a date at the start of that year. Each of those units is the dual of the
+    ``total_<unit>`` duration accessor that reads it back out (e.g. ``::milliseconds`` /
+    ``::total_milliseconds``).
 
     The optional ``strict`` argument controls what happens to values that cannot be converted. It mirrors
     :class:`~dftly.nodes.str.Strptime`'s ``strict`` argument, and for the same reason -- both lower onto a
@@ -186,6 +192,22 @@ class Cast(KwargsOnlyFn):
 
         >>> pl.select(Cast(Literal("4"), Literal("weeks")).polars_expr).item()
         datetime.timedelta(days=28)
+
+    Sub-second units are supported as well, so source columns recorded as millisecond (or smaller)
+    offsets can say what the data dictionary says rather than dividing by a power of ten:
+
+        >>> pl.select(Cast(Literal(1500), Literal("milliseconds")).polars_expr).item()
+        datetime.timedelta(seconds=1, microseconds=500000)
+        >>> pl.select(Cast(Literal(1500), Literal("microseconds")).polars_expr).item()
+        datetime.timedelta(microseconds=1500)
+        >>> pl.select(Cast(Literal(1_500_000), Literal("nanoseconds")).polars_expr).item()
+        datetime.timedelta(microseconds=1500)
+
+    ``::nanoseconds`` produces a nanosecond-resolution Duration in polars; it is only the round-trip
+    through Python's ``timedelta`` above that rounds to microseconds:
+
+        >>> pl.select(Cast(Literal(1_500_000), Literal("nanoseconds")).polars_expr).dtypes
+        [Duration(time_unit='ns')]
 
     Months and years are approximated as 30.4375 days and 365.25 days, respectively:
 

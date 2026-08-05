@@ -5,11 +5,11 @@ from functools import partial
 from dateutil import parser as dt_parser
 
 
-from importlib.resources import files
-from lark import Lark, Token, Transformer
+from lark import Token, Transformer
 from lark.exceptions import VisitError
 from lark.visitors import Discard
 
+from .grammar import GRAMMAR
 from ..nodes import (
     BINARY_OPS,
     UNARY_OPS,
@@ -19,10 +19,6 @@ from ..nodes import (
     Coalesce,
     Literal,
 )
-
-
-GRAMMAR_TEXT = files(__package__).joinpath("grammar.lark").read_text()
-GRAMMAR = Lark(GRAMMAR_TEXT, parser="lalr")
 
 
 class DftlyGrammar(Transformer):
@@ -71,6 +67,35 @@ class DftlyGrammar(Transformer):
 
         >>> DftlyGrammar.parse_str("$a + $b * 3")
         {'add': [{'column': 'a'}, {'multiply': [{'column': 'b'}, {'literal': 3}]}]}
+
+    Column names that are not identifiers -- spaces, punctuation, a leading digit -- are written
+    with backticks between the ``$`` and the name. This is the same node, just a quoted spelling of
+    it, so the two forms are interchangeable and a backtick-quoted identifier means what it says:
+
+        >>> DftlyGrammar.parse_str("$`Variable Name`")
+        {'column': 'Variable Name'}
+        >>> DftlyGrammar.parse_str("$`a`") == DftlyGrammar.parse_str("$a")
+        True
+
+    It composes like any other column reference -- in arithmetic, under casts, and inside
+    ``f"{...}"`` interpolation:
+
+        >>> DftlyGrammar.parse_str("$`Variable Name`::float + 1")
+        {'add': [{'cast': {'source': {'column': 'Variable Name'},
+                           'type': {'literal': 'float'}}}, {'literal': 1}]}
+        >>> DftlyGrammar.parse_str('f"OBS//{$`Variable Name`}"')
+        {'string_interpolate': [{'literal': 'OBS//{}'}, '$`Variable Name`']}
+
+    There is no escape for a literal backtick inside a quoted name, and an empty name is a parse
+    error rather than a reference to a column called ``""``:
+
+        >>> DftlyGrammar.parse_str("$``")
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to parse expression '$``': No terminal matches '`' ...
+
+    Such a column is still reachable through the dict form (``{"column": "..."}``), which has no
+    lexer to escape from.
 
     Strings will be parsed into string nodes:
 
@@ -122,6 +147,29 @@ class DftlyGrammar(Transformer):
         {'cast': {'source': {'column': 'dosage'},
                   'type': {'literal': 'float64'},
                   'strict': {'literal': False}}}
+
+    Casts chain, and read left to right -- each one applies to everything to its left, so
+    ``$x::int::year`` is ``($x::int)::year``. Chaining is sugar only: each link is still its own
+    ``cast`` node, so the chained and parenthesized spellings give the identical base form:
+
+        >>> DftlyGrammar.parse_str("$yr::int::year") == DftlyGrammar.parse_str("(($yr)::int)::year")
+        True
+        >>> DftlyGrammar.parse_str("$yr::int::year")
+        {'cast': {'source': {'cast': {'source': {'column': 'yr'},
+                                      'type': {'literal': 'int'}}},
+                  'type': {'literal': 'year'}}}
+
+    The ``as`` spelling chains the same way, and the two can be mixed -- with the usual precedence
+    difference, so a ``::`` link binds tighter than surrounding arithmetic while an ``as`` link does
+    not:
+
+        >>> DftlyGrammar.parse_str("$yr as int as year") == DftlyGrammar.parse_str("$yr::int::year")
+        True
+        >>> DftlyGrammar.parse_str("$dosage::?float64::str")
+        {'cast': {'source': {'cast': {'source': {'column': 'dosage'},
+                                      'type': {'literal': 'float64'},
+                                      'strict': {'literal': False}}},
+                  'type': {'literal': 'str'}}}
 
     The datetime accessors reachable through cast syntax extract a component rather than convert a
     value, so there is no strictness to relax and ``?`` is rejected rather than quietly ignored:
@@ -297,6 +345,11 @@ class DftlyGrammar(Transformer):
 
     def NAME(self, val: Token) -> str:
         return str(val)
+
+    def BACKTICK_NAME(self, val: Token) -> str:
+        # `$`Variable Name`` reduces through the same `column` rule as `$name`; strip the
+        # delimiters here so both spellings hand the handler a bare column name.
+        return str(val)[1:-1]
 
     def args(self, items: list[Any]) -> list[Any]:
         return items
