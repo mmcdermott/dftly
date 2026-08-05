@@ -355,8 +355,11 @@ shape: (1, 4)
 
 ```
 
-Braces nest inside a field (so `{2}` quantifiers work) and are ignored inside quoted strings, so
-`f"{$a ?? '}'}"` means what it looks like. Literal braces are doubled, as in Python: `{{` and `}}`.
+A field ends at the brace that closes it, never at a brace belonging to something inside it: dftly
+reads the field with its own parser, so a `{2}` quantifier, or a brace inside a string literal,
+regex literal, or backtick-quoted column name, is simply part of the expression — `f"{$a ?? '}'}"`
+means what it looks like. Literal braces in the surrounding text are doubled, as in Python: `{{` and
+`}}`.
 
 Python's format-spec and conversion syntax (`{x:>10}`, `{x!r}`) is **not** supported — a `:` or `!`
 inside a field is ordinary dftly syntax, which is what makes `f"{$dose::int}"` a cast rather than a
