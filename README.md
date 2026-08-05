@@ -168,9 +168,10 @@ Every other component name (`month_of_year`, `day_of_month`, etc.) follows the s
 Duration values project to numeric totals via `total_<unit>` cast names (`total_seconds`,
 `total_minutes`, `total_hours`, `total_days`, `total_milliseconds`, `total_microseconds`,
 `total_nanoseconds`). This is the dual to the existing `::days` / `::seconds` construction —
-numeric to Duration goes through plural unit names, Duration to numeric goes through
-`total_`-prefixed ones. Combined with datetime subtraction, this covers most time-derived
-feature engineering in one line:
+numeric to Duration goes through plural unit names (`nanoseconds`, `microseconds`, `milliseconds`,
+`seconds`, `minutes`, `hours`, `days`, `weeks`, `months`, `years`), Duration to numeric goes through
+`total_`-prefixed ones, and every unit is available in both directions. Combined with datetime
+subtraction, this covers most time-derived feature engineering in one line:
 
 ```python
 >>> ops = r"""
@@ -188,6 +189,28 @@ shape: (2, 3)
 │ 0                ┆ 0                 ┆ 10.001369 │
 │ 531              ┆ 12744             ┆ 8.54757   │
 └──────────────────┴───────────────────┴───────────┘
+
+```
+
+Sub-second units matter most when a source table records offsets in them. An offset column
+documented as milliseconds can say so directly, rather than being divided into a coarser unit:
+
+```python
+>>> from datetime import datetime
+>>> offsets = pl.DataFrame({
+...     "origin": [datetime(2020, 1, 1), datetime(2021, 6, 15)],
+...     "measuredat": [1500, 90000],  # milliseconds since admission
+... })
+>>> offsets.select(**Parser.to_polars({"measured_time": "$origin + $measuredat::milliseconds"}))
+shape: (2, 1)
+┌─────────────────────────┐
+│ measured_time           │
+│ ---                     │
+│ datetime[μs]            │
+╞═════════════════════════╡
+│ 2020-01-01 00:00:01.500 │
+│ 2021-06-15 00:01:30     │
+└─────────────────────────┘
 
 ```
 
