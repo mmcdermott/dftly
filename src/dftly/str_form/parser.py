@@ -123,6 +123,29 @@ class DftlyGrammar(Transformer):
                   'type': {'literal': 'float64'},
                   'strict': {'literal': False}}}
 
+    Casts chain, and read left to right -- each one applies to everything to its left, so
+    ``$x::int::year`` is ``($x::int)::year``. Chaining is sugar only: each link is still its own
+    ``cast`` node, so the chained and parenthesized spellings give the identical base form:
+
+        >>> DftlyGrammar.parse_str("$yr::int::year") == DftlyGrammar.parse_str("(($yr)::int)::year")
+        True
+        >>> DftlyGrammar.parse_str("$yr::int::year")
+        {'cast': {'source': {'cast': {'source': {'column': 'yr'},
+                                      'type': {'literal': 'int'}}},
+                  'type': {'literal': 'year'}}}
+
+    The ``as`` spelling chains the same way, and the two can be mixed -- with the usual precedence
+    difference, so a ``::`` link binds tighter than surrounding arithmetic while an ``as`` link does
+    not:
+
+        >>> DftlyGrammar.parse_str("$yr as int as year") == DftlyGrammar.parse_str("$yr::int::year")
+        True
+        >>> DftlyGrammar.parse_str("$dosage::?float64::str")
+        {'cast': {'source': {'cast': {'source': {'column': 'dosage'},
+                                      'type': {'literal': 'float64'},
+                                      'strict': {'literal': False}}},
+                  'type': {'literal': 'str'}}}
+
     The datetime accessors reachable through cast syntax extract a component rather than convert a
     value, so there is no strictness to relax and ``?`` is rejected rather than quietly ignored:
 
