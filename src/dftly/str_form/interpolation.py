@@ -46,7 +46,8 @@ def _find_field_end(pattern: str, start: int) -> int:
         >>> _find_field_end("{($a / $a)}{extract /0/ from $x}", 1)
         10
 
-    A field that is never closed, and an expression the grammar rejects outright, are both errors:
+    A field that is never closed, an expression the grammar rejects outright, and a character dftly
+    cannot lex at all are each reported where they occur rather than folded into the field:
 
         >>> _find_field_end("{$a", 1)
         Traceback (most recent call last):
@@ -56,6 +57,11 @@ def _find_field_end(pattern: str, start: int) -> int:
         Traceback (most recent call last):
             ...
         ValueError: Invalid expression in the interpolation field starting at position 0 of ...
+        >>> _find_field_end("{$a # 1}", 1)
+        Traceback (most recent call last):
+            ...
+        ValueError: Cannot lex '#' at position 4 of '{$a # 1}'. Interpolation fields hold dftly
+        expressions; literal text belongs outside the `{...}`.
     """
     try:
         for _ in GRAMMAR.parse_interactive(pattern[start:]).iter_parse():
