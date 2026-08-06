@@ -322,7 +322,17 @@ class Parser:
             TypeError: data must be a str, Path, or dict; got <class 'int'> instead
         """
         parser = cls()
+        mapping = cls._to_mapping(data)
 
+        exprs = {}
+        for name, value in mapping.items():
+            exprs[name] = parser(value).polars_expr.alias(name)
+
+        return exprs
+
+    @classmethod
+    def _to_mapping(cls, data: str | Path | dict[str, Any]) -> dict[str, Any]:
+        """Normalize a YAML string, file path, or dict into a plain ``{name: expression}`` mapping."""
         if isinstance(data, dict):
             mapping = data
         elif isinstance(data, str):
@@ -347,12 +357,101 @@ class Parser:
             raise ValueError(
                 f"YAML content must be a dictionary at the top level; got {type(mapping)}"
             )
+        return mapping
 
-        exprs = {}
-        for name, value in mapping.items():
-            exprs[name] = parser(value).polars_expr.alias(name)
+    @classmethod
+    def _to_nodes(cls, data: str | Path | dict[str, Any]) -> dict[str, NodeBase]:
+        """Normalize any accepted input into ``{output_name: node}`` without compiling to polars.
 
-        return exprs
+        ``to_polars`` and ``to_frame`` share this so they agree on parsing; only what they do with
+        the resulting nodes differs.
+        """
+        mapping = cls._to_mapping(data)
+        parser = cls()
+        return {name: parser(value) for name, value in mapping.items()}
+
+    @classmethod
+    def to_frame(
+        cls, df: pl.DataFrame, data: str | Path | dict[str, Any]
+    ) -> pl.DataFrame:
+        """Compile and apply ``data`` to ``df``, returning a DataFrame.
+
+        This is the frame-level counterpart to :meth:`to_polars`. It exists because row-multiplying
+        operations cannot be expressed as ``pl.Expr`` at all -- see :class:`dftly.nodes.frame.Explode`.
+        For configs with no such operation it is exactly ``df.select(**to_polars(data))``.
+
+        Examples:
+            >>> df = pl.DataFrame({"id": [1, 2], "csv": ["a,b,c", "d"]})
+            >>> Parser.to_frame(df, {"id": "$id", "n": "$id * 10"})
+            shape: (2, 2)
+            ┌─────┬─────┐
+            │ id  ┆ n   │
+            │ --- ┆ --- │
+            │ i64 ┆ i64 │
+            ╞═════╪═════╡
+            │ 1   ┆ 10  │
+            │ 2   ┆ 20  │
+            └─────┴─────┘
+
+        An ``explode`` marker is hoisted out of the expression and applied after the select, so the
+        non-exploded columns are repeated rather than erroring on a length mismatch:
+
+            >>> Parser.to_frame(df, {"id": "$id", "part": 'explode(split($csv, ","))'})
+            shape: (4, 2)
+            ┌─────┬──────┐
+            │ id  ┆ part │
+            │ --- ┆ ---  │
+            │ i64 ┆ str  │
+            ╞═════╪══════╡
+            │ 1   ┆ a    │
+            │ 1   ┆ b    │
+            │ 1   ┆ c    │
+            │ 2   ┆ d    │
+            └─────┴──────┘
+
+        The marker is only meaningful as the outermost node of an output. Nested inside another
+        expression it has no definable meaning, and is rejected rather than silently ignored:
+
+            >>> Parser.to_frame(df, {"bad": 'len_chars(explode(split($csv, ",")))'})
+            Traceback (most recent call last):
+                ...
+            ValueError: `explode` may only appear as the outermost node of an output; found it
+            nested inside output 'bad'.
+        """
+        from .nodes.frame import Explode
+
+        nodes = cls._to_nodes(data)
+
+        exprs, to_explode = {}, []
+        for name, node in nodes.items():
+            if isinstance(node, Explode):
+                to_explode.append(name)
+                inner = node.source
+            else:
+                inner = node
+            if cls._contains_explode(inner):
+                raise ValueError(
+                    "`explode` may only appear as the outermost node of an output; found it "
+                    f"nested inside output {name!r}."
+                )
+            exprs[name] = inner.polars_expr.alias(name)
+
+        out = df.select(**exprs)
+        return out.explode(to_explode) if to_explode else out
+
+    @classmethod
+    def _contains_explode(cls, node: Any) -> bool:
+        """Recursively test whether ``node`` contains an Explode marker anywhere within it."""
+        from .nodes.frame import Explode
+
+        if isinstance(node, Explode):
+            return True
+        if not isinstance(node, NodeBase):
+            return False
+        children = list(getattr(node, "args", ())) + list(
+            getattr(node, "kwargs", {}).values()
+        )
+        return any(cls._contains_explode(child) for child in children)
 
     @classmethod
     def expr_to_polars(cls, expr: str) -> pl.Expr:
