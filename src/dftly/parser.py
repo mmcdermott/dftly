@@ -322,7 +322,32 @@ class Parser:
             TypeError: data must be a str, Path, or dict; got <class 'int'> instead
         """
         parser = cls()
+        mapping, explode_cols = cls._to_mapping(data)
 
+        if explode_cols:
+            raise ValueError(
+                f"{cls.EXPLODE_KEY!r} requests row expansion of {explode_cols}, which `to_polars` "
+                "cannot honor -- it returns length-preserving expressions for `df.select`. Use "
+                "`Parser.to_frame(df, ops)` instead."
+            )
+
+        exprs = {}
+        for name, value in mapping.items():
+            exprs[name] = parser(value).polars_expr.alias(name)
+
+        return exprs
+
+    EXPLODE_KEY = "_explode"
+
+    @classmethod
+    def _to_mapping(
+        cls, data: str | Path | dict[str, Any]
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Normalize input into ``({name: expression}, explode_columns)``.
+
+        The reserved ``_explode`` key is stripped out here rather than being treated as an output
+        column, so both entry points see the same expression mapping.
+        """
         if isinstance(data, dict):
             mapping = data
         elif isinstance(data, str):
@@ -348,11 +373,94 @@ class Parser:
                 f"YAML content must be a dictionary at the top level; got {type(mapping)}"
             )
 
-        exprs = {}
-        for name, value in mapping.items():
-            exprs[name] = parser(value).polars_expr.alias(name)
+        mapping = dict(mapping)
+        raw = mapping.pop(cls.EXPLODE_KEY, None)
+        if raw is None:
+            explode_cols = []
+        elif isinstance(raw, str):
+            explode_cols = [raw]
+        elif isinstance(raw, list) and all(isinstance(c, str) for c in raw):
+            explode_cols = list(raw)
+        else:
+            raise ValueError(
+                f"{cls.EXPLODE_KEY!r} must be a column name or a list of column names; got {raw!r}"
+            )
 
-        return exprs
+        unknown = [c for c in explode_cols if c not in mapping]
+        if unknown:
+            raise ValueError(
+                f"{cls.EXPLODE_KEY!r} names {unknown}, which are not outputs of this config. "
+                f"Available outputs: {sorted(mapping)}"
+            )
+
+        return mapping, explode_cols
+
+    @classmethod
+    def to_frame(
+        cls, df: pl.DataFrame, data: str | Path | dict[str, Any]
+    ) -> pl.DataFrame:
+        """Compile and apply ``data`` to ``df``, returning a DataFrame.
+
+        This is the frame-level counterpart to :meth:`to_polars`. It exists because row-multiplying
+        operations cannot be expressed as ``pl.Expr`` at all: ``select`` is length-preserving, so an
+        exploded column and an ordinary one cannot coexist in it. With no ``_explode`` key this is
+        exactly ``df.select(**to_polars(data))``.
+
+        Examples:
+            >>> df = pl.DataFrame({"id": [1, 2], "csv": ["a,b,c", "d"]})
+            >>> Parser.to_frame(df, {"id": "$id", "n": "$id * 10"})
+            shape: (2, 2)
+            ┌─────┬─────┐
+            │ id  ┆ n   │
+            │ --- ┆ --- │
+            │ i64 ┆ i64 │
+            ╞═════╪═════╡
+            │ 1   ┆ 10  │
+            │ 2   ┆ 20  │
+            └─────┴─────┘
+
+        Row expansion is declared at the top level of the config, not inside an expression, so the
+        cardinality change is visible without reading the expressions:
+
+            >>> ops = {"id": "$id", "part": 'split($csv, ",")', "_explode": ["part"]}
+            >>> Parser.to_frame(df, ops)
+            shape: (4, 2)
+            ┌─────┬──────┐
+            │ id  ┆ part │
+            │ --- ┆ ---  │
+            │ i64 ┆ str  │
+            ╞═════╪══════╡
+            │ 1   ┆ a    │
+            │ 1   ┆ b    │
+            │ 1   ┆ c    │
+            │ 2   ┆ d    │
+            └─────┴──────┘
+
+        Naming an output that does not exist is caught rather than silently ignored:
+
+            >>> Parser.to_frame(df, {"part": 'split($csv, ",")', "_explode": ["typo"]})
+            Traceback (most recent call last):
+                ...
+            ValueError: '_explode' names ['typo'], which are not outputs of this config. ...
+
+        And ``to_polars`` refuses a config it cannot faithfully compile, rather than dropping the
+        directive on the floor:
+
+            >>> Parser.to_polars({"part": 'split($csv, ",")', "_explode": ["part"]})
+            Traceback (most recent call last):
+                ...
+            ValueError: '_explode' requests row expansion of ['part'], which `to_polars` cannot
+            honor ...
+        """
+        parser = cls()
+        mapping, explode_cols = cls._to_mapping(data)
+
+        exprs = {
+            name: parser(value).polars_expr.alias(name)
+            for name, value in mapping.items()
+        }
+        out = df.select(**exprs)
+        return out.explode(explode_cols) if explode_cols else out
 
     @classmethod
     def expr_to_polars(cls, expr: str) -> pl.Expr:
