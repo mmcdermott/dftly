@@ -15,6 +15,7 @@ from .arithmetic import (
     Min,
     Max,
     Coalesce,
+    NullIf,
 )
 from .comparison import (
     GreaterThan,
@@ -51,6 +52,7 @@ from .str import (
     RegexMatch,
     Strptime,
     LenChars,
+    StripChars,
     Substring,
     Split,
 )
@@ -70,6 +72,7 @@ __nodes = [
     Min,
     Max,
     Coalesce,
+    NullIf,
     Add,
     Subtract,
     Multiply,
@@ -85,6 +88,7 @@ __nodes = [
     RegexExtract,
     RegexMatch,
     LenChars,
+    StripChars,
     Substring,
     Split,
     Conditional,

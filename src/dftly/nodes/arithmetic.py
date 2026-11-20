@@ -513,3 +513,103 @@ class Coalesce(ArgsOnlyFn):
 
     KEY = "coalesce"
     pl_fn = pl.coalesce
+
+
+class NullIf(ArgsOnlyFn):
+    """This non-terminal node returns null where its first argument equals its second, else the first.
+
+    These are the semantics of SQL's ``NULLIF(a, b)``, and the inverse of :class:`Coalesce`: where
+    ``coalesce`` (``??``) turns nulls into a value, ``null_if`` turns a value into null. The result
+    keeps the first argument's dtype and name. The base form is positional, ``{null_if: [a, b]}``.
+
+    Example:
+        >>> from dftly.nodes import Literal, Column
+        >>> pl.select(NullIf(Literal("N/A"), Literal("N/A")).polars_expr).item() is None
+        True
+        >>> pl.select(NullIf(Literal("mg"), Literal("N/A")).polars_expr).item()
+        'mg'
+
+    Nulls propagate from the first argument, and a null second argument never matches, so the
+    first argument passes through unchanged -- again as in SQL:
+
+        >>> df = pl.DataFrame({"a": [1, 2, None, None, 3], "b": [1, None, 4, None, 4]})
+        >>> df.select(NullIf(Column("a"), Column("b")).polars_expr)
+        shape: (5, 1)
+        ┌──────┐
+        │ a    │
+        │ ---  │
+        │ i64  │
+        ╞══════╡
+        │ null │
+        │ 2    │
+        │ null │
+        │ null │
+        │ 3    │
+        └──────┘
+
+    It works for any comparable dtype, with the same comparison (and the same type errors) as
+    ``==``. Polars' equality treats ``NaN`` as equal to itself, so ``null_if($x, nan)`` nulls NaNs:
+
+        >>> df = pl.DataFrame({"x": [0.0, -999.0, float("nan"), None]})
+        >>> df.select(NullIf(Column("x"), Literal(-999)).polars_expr)["x"].to_list()
+        [0.0, None, nan, None]
+        >>> df.select(NullIf(Column("x"), Literal(float("nan"))).polars_expr)["x"].to_list()
+        [0.0, -999.0, None, None]
+        >>> df = pl.DataFrame({"d": [datetime(2024, 1, 1), datetime(1900, 1, 1)]})
+        >>> df.select(NullIf(Column("d"), Literal(datetime(1900, 1, 1))).polars_expr)["d"].to_list()
+        [datetime.datetime(2024, 1, 1, 0, 0), None]
+
+    The motivating use is blank-to-null after stripping whitespace, composed with
+    :class:`~dftly.nodes.str.StripChars` and ``??``:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"unit": ["mg", " mg ", "  ", "", None]})
+        >>> expr = Parser.expr_to_polars('null_if(strip_chars($unit), "") ?? "UNK"')
+        >>> df.select(expr)["unit"].to_list()
+        ['mg', 'mg', 'UNK', 'UNK', 'UNK']
+
+    String form is an ordinary function call; it and the dict form give the same node:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str('null_if($unit, "N/A")')
+        {'null_if': [{'column': 'unit'}, {'literal': 'N/A'}]}
+        >>> Parser()({"null_if": [{"column": "unit"}, {"literal": "N/A"}]})
+        NullIf(Column('unit'), Literal('N/A'))
+
+    Exactly two arguments are required, in either form:
+
+        >>> NullIf(Literal(1))
+        Traceback (most recent call last):
+            ...
+        ValueError: null_if requires exactly two arguments; got 1
+        >>> Parser.expr_to_polars("null_if($x)")
+        Traceback (most recent call last):
+            ...
+        ValueError: No matching node found for value: {'null_if': [{'column': 'x'}]}.
+        Errors from attempted matches:
+        - null_if: null_if requires exactly two arguments; got 1
+    """
+
+    KEY = "null_if"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 2:
+            raise ValueError(
+                f"{self.KEY} requires exactly two arguments; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        # ``ne_missing`` is null-aware: it is true when exactly one side is null, so a null second
+        # argument keeps the first, and false when both are null. Using it as the only branch of a
+        # ``when`` (no ``otherwise``) yields null exactly where the arguments are equal, and keeps
+        # the first argument's dtype and output name.
+        source = self.args[0].polars_expr
+        return pl.when(source.ne_missing(self.args[1].polars_expr)).then(source)

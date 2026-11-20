@@ -439,6 +439,46 @@ shape: (2, 4)
 `coalesce(coalesce($a, $b), UNK)`, which returns the same first-non-null result as the flat
 `coalesce($a, $b, UNK)`.
 
+### Stripping whitespace and nulling sentinels
+
+`strip_chars($col)` removes leading and trailing whitespace, exactly like polars'
+`str.strip_chars()`: interior whitespace is kept, whitespace means Unicode `White_Space`, null stays
+null, and a blank string becomes the empty string `""` (not null). `null_if(a, b)` is SQL's
+`NULLIF` and the inverse of `??`: it returns null where `a == b` and `a` otherwise, keeping `a`'s
+type, so it also turns numeric or date sentinels such as `-999` into nulls. Together they express
+"strip it, treat blank as missing, then fill a default":
+
+```python
+>>> unit_df = pl.DataFrame({"unit": [" mg", "mL / h ", "  ", None], "dose": [5, -999, 2, None]})
+>>> strip_ops = {
+...     "stripped": "strip_chars($unit)",
+...     "unit": 'null_if(strip_chars($unit), "") ?? "UNK"',
+...     "dose": "null_if($dose, -999)",
+... }
+>>> unit_df.select(**Parser.to_polars(strip_ops))
+shape: (4, 3)
+┌──────────┬────────┬──────┐
+│ stripped ┆ unit   ┆ dose │
+│ ---      ┆ ---    ┆ ---  │
+│ str      ┆ str    ┆ i64  │
+╞══════════╪════════╪══════╡
+│ mg       ┆ mg     ┆ 5    │
+│ mL / h   ┆ mL / h ┆ null │
+│          ┆ UNK    ┆ 2    │
+│ null     ┆ UNK    ┆ null │
+└──────────┴────────┴──────┘
+
+```
+
+Both are plain function calls, so their base forms are positional lists:
+
+```python
+>>> from dftly.str_form.parser import DftlyGrammar
+>>> DftlyGrammar.parse_str('null_if(strip_chars($unit), "")')
+{'null_if': [{'strip_chars': [{'column': 'unit'}]}, {'literal': ''}]}
+
+```
+
 You can also add literal columns:
 
 ```python
