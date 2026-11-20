@@ -784,6 +784,86 @@ class LenChars(ArgsOnlyFn):
         return self.args[0].polars_expr.str.len_chars()
 
 
+class StripChars(ArgsOnlyFn):
+    """This non-terminal node strips leading and trailing whitespace from a string expression.
+
+    Name and semantics match Polars' ``pl.Expr.str.strip_chars()`` called with no argument, which
+    is exactly what this node lowers to. Like :class:`LenChars` it is function-only, so it is an
+    :class:`ArgsOnlyFn` with a single-argument check.
+
+    Example:
+        >>> from dftly.nodes import Literal, Column
+        >>> pl.select(StripChars(Literal("  mg ")).polars_expr).item()
+        'mg'
+        >>> pl.select(StripChars(Literal("\\tmL / h\\n")).polars_expr).item()
+        'mL / h'
+
+    Only the ends are stripped; interior whitespace is kept:
+
+        >>> pl.select(StripChars(Literal(" a  b ")).polars_expr).item()
+        'a  b'
+
+    A blank string strips to the empty string, **not** to null, and null stays null -- exactly as
+    in Polars. To treat blank input as missing, compose with
+    :class:`~dftly.nodes.arithmetic.NullIf`: ``null_if(strip_chars($x), "")``.
+
+        >>> df = pl.DataFrame({"unit": ["mg", " mg", "mg ", "\\tmg\\n", "mL / h", "  ", "", None]})
+        >>> df.select(StripChars(Column("unit")).polars_expr)["unit"].to_list()
+        ['mg', 'mg', 'mg', 'mg', 'mL / h', '', '', None]
+
+    "Whitespace" is the Unicode ``White_Space`` property, so no-break and ideographic spaces are
+    stripped while zero-width characters such as ``U+200B`` and ``U+FEFF`` are not. This differs
+    from Python's ``str.strip()`` on the ASCII separators ``U+001C``-``U+001F``, which Python
+    strips and Polars (and so dftly) does not:
+
+        >>> df = pl.DataFrame({"s": ["\\u00a0mg\\u3000", "\\u200bmg\\ufeff", "\\x1cmg\\x85"]})
+        >>> df.select(StripChars(Column("s")).polars_expr)["s"].to_list()
+        ['mg', '\\u200bmg\\ufeff', '\\x1cmg']
+
+    It parses from string form via the function-call grammar, and composes like any other
+    expression -- here with ``??`` to fill a sentinel for nulls:
+
+        >>> from dftly import Parser
+        >>> df = pl.DataFrame({"unit": [" mg", None]})
+        >>> df.select(Parser.expr_to_polars("strip_chars($unit) ?? 'UNK'"))["unit"].to_list()
+        ['mg', 'UNK']
+
+    The base form is a one-element list, as for ``len_chars``:
+
+        >>> from dftly.str_form.parser import DftlyGrammar
+        >>> DftlyGrammar.parse_str("strip_chars($unit)")
+        {'strip_chars': [{'column': 'unit'}]}
+        >>> Parser()({"strip_chars": [{"column": "unit"}]})
+        StripChars(Column('unit'))
+
+    Only one argument is accepted; Polars' optional ``characters`` set is not exposed:
+
+        >>> StripChars(Literal("a"), Literal("b"))
+        Traceback (most recent call last):
+            ...
+        ValueError: strip_chars requires exactly one argument; got 2
+    """
+
+    KEY = "strip_chars"
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.args) != 1:
+            raise ValueError(
+                f"{self.KEY} requires exactly one argument; got {len(self.args)}"
+            )
+
+    @classmethod
+    def from_lark(cls, items):
+        if not isinstance(items, list):
+            items = [items]
+        return {cls.KEY: items}
+
+    @property
+    def polars_expr(self) -> pl.Expr:
+        return self.args[0].polars_expr.str.strip_chars()
+
+
 class Substring(KwargsOnlyFn):
     """This non-terminal node extracts a substring from a string expression.
 
